@@ -19,11 +19,18 @@ def list_containers():
                 "name": "mock_container_1",
                 "status": "running",
                 "ports": {"80/tcp": [{"HostIp": "127.0.0.1", "HostPort": "8080"}]},
-                "labels": {"exposed": "true"}
+                "labels": {"exposed": "true", "com.docker.compose.project": "mock_project"}
             },
             {
                 "name": "mock_container_2",
                 "status": "exited",
-                "ports": {}
-            }
+                "ports": {},
+                "labels": {"com.docker.compose.project": "mock_project"}
+            },
+            {
+                "name": "mock_container_3",
+                "status": "exited",
+                "ports": {},
+                "labels": {}
+            },
         ]
