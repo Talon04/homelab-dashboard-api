@@ -1,7 +1,18 @@
-const IP_FOR_INTERNAL_LINKS = "192.168.8.152";
-const IP_FOR_EXPOSED_LINKS = "192.168.8.152";
+let IP_FOR_INTERNAL_LINKS = "127.0.0.1";
+let IP_FOR_EXPOSED_LINKS = "127.0.0.1";
+
 
 window.addEventListener("DOMContentLoaded", async () => {
+   // Load IP config first
+  try {
+    const configRes = await fetch("/api/config");
+    const configData = await configRes.json();
+    IP_FOR_INTERNAL_LINKS = configData.internal_ip;
+    IP_FOR_EXPOSED_LINKS = configData.external_ip;
+  } catch (err) {
+    console.warn("Failed to load IP config, using defaults");
+  }
+
   const res = await fetch("/api/containers");
   const data = await res.json();
 
