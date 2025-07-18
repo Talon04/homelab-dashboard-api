@@ -56,9 +56,18 @@ def get_container_ports(container_name):
                         "host_ip": m["HostIp"],
                         "host_port": m["HostPort"]
                     })
+            port_list = []
+            for container_port, mappings in ports.items():
+                if mappings is None:
+                    continue  # no port mapped
+                for m in mappings:
+                    port_list.append({
+                        "container_port": container_port,
+                        "host_ip": m["HostIp"],
+                        "host_port": m["HostPort"]
+                    })
 
-            return port_list
-
+                return port_list
         except Exception as e:
             print("[WARN] Docker not available, using mock data:", e)
             return []
@@ -70,3 +79,4 @@ def get_container_ports(container_name):
                 "host_port": "8080"
             }
         ]
+    
