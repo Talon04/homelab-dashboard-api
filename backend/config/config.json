@@ -1,0 +1,6 @@
+{
+    "preferred_ports": {
+        "mock_container_1": "8080",
+        "mock_container_3": "8080"
+    }
+}

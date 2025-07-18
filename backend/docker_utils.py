@@ -1,19 +1,24 @@
 import docker
 
+useDocker = False
 def list_containers():
-    try:
-        client = docker.from_env()
-        containers = client.containers.list(all=True)
-        return [
-            {
-                "name": c.name,
-                "status": c.status,
-                "ports": c.attrs['NetworkSettings']['Ports']
-            }
-            for c in containers
-        ]
-    except Exception as e:
-        print("[WARN] Docker not available, using mock data:", e)
+    if useDocker:
+        try:
+            client = docker.from_env()
+            containers = client.containers.list(all=True)
+            return [
+                {
+                    "name": c.name,
+                    "status": c.status,
+                    "ports": c.attrs['NetworkSettings']['Ports'],
+                    "labels": c.attrs.get('Config', {}).get('Labels', {})
+                }
+                for c in containers
+            ]
+        except Exception as e:
+            print("[WARN] Docker not available, using mock data:", e)
+            return []
+    else:
         return [
             {
                 "name": "mock_container_1",
@@ -35,28 +40,33 @@ def list_containers():
             },
         ]
 def get_container_ports(container_name):
-    try:
-        client = docker.from_env()
-        container = client.containers.get(container_name)
-        ports = container.attrs['NetworkSettings']['Ports']
+    if useDocker:
+        try:
+            client = docker.from_env()
+            container = client.containers.get(container_name)
+            ports = container.attrs['NetworkSettings']['Ports']
 
-        port_list = []
-        for container_port, mappings in ports.items():
-            if mappings is None:
-                continue  # no port mapped
-            for m in mappings:
-                port_list.append({
-                    "container_port": container_port,
-                    "host_ip": m["HostIp"],
-                    "host_port": m["HostPort"]
-                })
+            port_list = []
+            for container_port, mappings in ports.items():
+                if mappings is None:
+                    continue  # no port mapped
+                for m in mappings:
+                    port_list.append({
+                        "container_port": container_port,
+                        "host_ip": m["HostIp"],
+                        "host_port": m["HostPort"]
+                    })
 
-        return port_list
+            return port_list
 
-    except Exception as e:
-        print("[WARN] Docker not available, using mock data:", e)
-        return [{
-            "container_port": "80/tcp",
-            "host_ip": "127.0.0.1",
-            "host_port": "8080"
-        }]
+        except Exception as e:
+            print("[WARN] Docker not available, using mock data:", e)
+            return []
+    else:
+        return [
+            {
+                "container_port": "80/tcp",
+                "host_ip": "127.0.0.1",
+                "host_port": "8080"
+            }
+        ]
