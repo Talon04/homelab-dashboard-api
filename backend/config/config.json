@@ -1,6 +1,10 @@
 {
     "preferred_ports": {
         "mock_container_1": "8080",
-        "mock_container_3": "8080"
+        "mock_container_3": "8080",
+        "mock_container_2": "8080",
+        "dadk\u00f6nfm": "8080",
+        "dadk\u00f6ndanwl\u00e4nfm": "8080",
+        "dadk\u00f6ndanwl\u00e4nfmdaw": "8080"
     }
 }
