@@ -1,15 +1,32 @@
 import json
 import os
 import docker_utils
+
 config_path = "config/config.json"
 default_ip = "127.0.0.1"
+
+
+def guess_preferred_port(container_id):
+    ports = docker_utils.get_container_ports(container_id)
+    # List of common web ports, in order of preference
+    web_ports = ["80", "8080", "443", "8000", "5000", "3000"]
+    for wp in web_ports:
+        for p in ports:
+            # Match both tcp and udp, but prefer tcp
+            if p["container_port"].startswith(wp + "/tcp"):
+                return p["host_port"]
+    # Fallback to first port if available
+    if ports and isinstance(ports, list) and len(ports) > 0:
+        return ports[0].get("host_port", "default_port")
+    return "null"
+
 def tryGenerateConfig():
     preferred_ports = tryGeneratePrefferedPorts()
     internal_link_bodies = tryGenerateInternalLinkBodies()
     if not os.path.exists(config_path):
         default_config = {
             "preferred_ports": {},
-            "internal_link_bodies" : {},
+            "internal_link_bodies": {},  # Make sure this key matches what's used elsewhere
             "exposed_containers": []
         }
         with open(config_path, 'w') as config_file:
@@ -48,8 +65,13 @@ def tryGenerateInternalLinkBodies():
 def get_preferred_port(container_id):
     with open(config_path) as config_file:
         config = json.load(config_file)
-        return config["preferred_ports"].get(container_id, "default_port")
-    
+    port = config["preferred_ports"].get(container_id)
+    if port is None or port == "default_port":
+        # Try to guess and set a preferred port
+        port = guess_preferred_port(container_id)
+        set_preferred_port(container_id, port)
+    return port
+
 def set_preferred_port(container_id, port):
     with open(config_path) as config_file:
         config = json.load(config_file)
@@ -61,12 +83,12 @@ def set_preferred_port(container_id, port):
 def get_link_body(container_id):
     with open(config_path) as config_file:
         config = json.load(config_file)
-        return config["link_bodies"].get(container_id, "default_port")
+        return config["internal_link_bodies"].get(container_id, "default_port")
     
 def set_link_body(container_id, link_body):
     with open(config_path) as config_file:
         config = json.load(config_file)
-        config["link_bodies"][container_id] = link_body
+        config["internal_link_bodies"][container_id] = link_body
     with open(config_path, 'w') as config_file:
         json.dump(config, config_file, indent=4)
     print(f"Link Body for {container_id} set to {link_body}")

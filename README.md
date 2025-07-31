@@ -12,6 +12,8 @@ A self-hosted control panel to monitor and manage Docker containers, backups, an
 - Docker SDK
 - HTML + JS frontend
 - Deployed via Docker
+## .env Variables:
+- DONT_USE_DOCKER: Mainly for testing, uses mock containers instead  of live Docker
 
 ## 🔧 Local Setup
 

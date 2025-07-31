@@ -75,7 +75,7 @@ def set_exposed_containers():
     if not data:
         return jsonify({"error": "Invalid or missing JSON body"}), 400
 
-    container = data.get("container")
+    container = data.get("container_id")
     exposed = data.get("exposed")
 
     if not container or exposed is None:

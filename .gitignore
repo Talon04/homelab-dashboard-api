@@ -4,4 +4,5 @@ __pycache__/
 *.log
 .env.*
 .vscode/
-/config/config.json
+backend/config/config.json
+.venv

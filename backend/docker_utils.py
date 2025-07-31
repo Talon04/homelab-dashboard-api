@@ -1,26 +1,11 @@
+import os
 import docker
+
+dontUseDocker = os.environ.get("DONT_USE_DOCKER", "false").lower() == "true"
 
 useDocker = False
 def list_containers():
-    if useDocker:
-        print("[DEBUG] Attempting real Docker access")
-        try:
-            client = docker.from_env()
-            containers = client.containers.list(all=True)
-            return [
-                {
-                    "id" : c.id,
-                    "name": c.name,
-                    "status": c.status,
-                    "ports": c.attrs['NetworkSettings']['Ports'],
-                    "labels": c.attrs.get('Config', {}).get('Labels', {})
-                }
-                for c in containers
-            ]
-        except Exception as e:
-            print("[WARN] Docker not available, using mock data:", e)
-            return []
-    else:
+    if dontUseDocker:
         return [
             {
                 "id" : "dadkönfm",
@@ -44,8 +29,41 @@ def list_containers():
                 "labels": {}
             },
         ]
+    else:
+        print("[DEBUG] Attempting real Docker access")
+        try:
+            client = docker.from_env()
+            containers = client.containers.list(all=True)
+            return [
+                {
+                    "id" : c.id,
+                    "name": c.name,
+                    "status": c.status,
+                    "ports": c.attrs['NetworkSettings']['Ports'],
+                    "labels": c.attrs.get('Config', {}).get('Labels', {})
+                }
+                for c in containers
+            ]
+        except Exception as e:
+            print("[WARN] Docker not available, using mock data:", e)
+            return []
+
 def get_container_ports(container_id):
-    if useDocker:
+    if dontUseDocker:
+        mock_ports = {
+            "dadkönfm": [
+                {"container_port": "80/tcp", "host_ip": "127.0.0.1", "host_port": "8080"},
+                {"container_port": "19/udp", "host_ip": "127.0.0.1", "host_port": "9090"}
+            ],
+            "dadköndanwlänfm": [
+                # No ports for this container
+            ],
+            "dadköndanwlänfmdaw": [
+                # No ports for this container
+            ]
+        }
+        return mock_ports.get(container_id, [])
+    else:
         print("[DEBUG] Attempting real Docker access")
         try:
             client = docker.from_env()
@@ -66,12 +84,4 @@ def get_container_ports(container_id):
         except Exception as e:
             print("[WARN] Docker not available, using mock data:", e)
             return []
-    else:
-        return [
-            {
-                "container_port": "80/tcp",
-                "host_ip": "127.0.0.1",
-                "host_port": "8080"
-            }
-        ]
-    
+
