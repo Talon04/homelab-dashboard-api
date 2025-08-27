@@ -27,7 +27,10 @@ def tryGenerateConfig():
         default_config = {
             "preferred_ports": {},
             "internal_link_bodies": {},  # Make sure this key matches what's used elsewhere
-            "exposed_containers": []
+            "exposed_containers": [],
+            "proxy_count": 0,  # Number of proxies (0 = no proxy)
+            "internal_ip": default_ip,
+            "external_ip": default_ip
         }
         with open(config_path, 'w') as config_file:
             json.dump(default_config, config_file, indent=4)
@@ -109,3 +112,42 @@ def set_exposed_containers(container, exposed):
     with open(config_path, 'w') as config_file:
         json.dump(config, config_file, indent=4)
     print(f"Exposed containers updated: {config['exposed_containers']}")
+
+def get_proxy_count():
+    with open(config_path) as config_file:
+        config = json.load(config_file)
+        return config.get("proxy_count", 0)
+
+def set_proxy_count(proxy_count):
+    with open(config_path) as config_file:
+        config = json.load(config_file)
+        config["proxy_count"] = int(proxy_count)
+    with open(config_path, 'w') as config_file:
+        json.dump(config, config_file, indent=4)
+    print(f"Proxy count set to {proxy_count}")
+
+def get_internal_ip():
+    with open(config_path) as config_file:
+        config = json.load(config_file)
+        return config.get("internal_ip", "127.0.0.1")
+
+def set_internal_ip(ip):
+    with open(config_path) as config_file:
+        config = json.load(config_file)
+        config["internal_ip"] = ip
+    with open(config_path, 'w') as config_file:
+        json.dump(config, config_file, indent=4)
+    print(f"Internal IP set to {ip}")
+
+def get_external_ip():
+    with open(config_path) as config_file:
+        config = json.load(config_file)
+        return config.get("external_ip", "127.0.0.1")
+
+def set_external_ip(ip):
+    with open(config_path) as config_file:
+        config = json.load(config_file)
+        config["external_ip"] = ip
+    with open(config_path, 'w') as config_file:
+        json.dump(config, config_file, indent=4)
+    print(f"External IP set to {ip}")

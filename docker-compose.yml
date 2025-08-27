@@ -5,9 +5,6 @@ services:
     image: ghcr.io/ytjackboom/homelab-dashboard-api:latest
     ports:
       - "5000:5000"
-    environment:
-      - INTERNAL_IP=${INTERNAL_IP}
-      - EXTERNAL_IP=${EXTERNAL_IP}
     volumes:
       - ./app:/app
       - ./templates:/app/templates

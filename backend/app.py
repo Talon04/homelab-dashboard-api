@@ -1,17 +1,25 @@
 import os
 from flask import Flask, render_template, jsonify, request
+from werkzeug.middleware.proxy_fix import ProxyFix
 import config_utils
 import docker_utils
+
 app = Flask(__name__, template_folder='../frontend/templates', static_folder='../frontend/static')
 
 config_utils.tryGenerateConfig()
 
-INTERNAL_IP = os.getenv("INTERNAL_IP", "127.0.0.1")
-EXTERNAL_IP = os.getenv("EXTERNAL_IP", "127.0.0.1")
+# Configure proxy fix based on config
+proxy_count = config_utils.get_proxy_count()
+if proxy_count > 0:
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=proxy_count, x_proto=proxy_count, x_host=proxy_count, x_prefix=proxy_count)
 
 @app.route("/")
 def index():
     return render_template("index.html")
+
+@app.route("/settings")
+def settings():
+    return render_template("settings.html")
 
 @app.route("/api/containers")
 def containers():
@@ -19,12 +27,6 @@ def containers():
 @app.route("/api/containers/ports/<container_id>")
 def container_ports(container_id):
     return jsonify(docker_utils.get_container_ports(container_id))
-@app.route("/api/config")
-def get_config():
-    return jsonify({
-        "internal_ip": INTERNAL_IP,
-        "external_ip": EXTERNAL_IP
-    })
 @app.route("/api/config/preferred_ports/<container_id>")
 def get_preferred_port(container_id):
     port = config_utils.get_preferred_port(container_id)
@@ -51,7 +53,7 @@ def get_link_body(container_id):
     return jsonify(link_body)
 @app.route("/api/config/link_bodies", methods = ["POST"])
 def set_link_body():
-    data = request.json()
+    data = request.get_json()
 
     if not data:
         return jsonify({"error": "Invalid or missing JSON body"}), 400
@@ -83,3 +85,70 @@ def set_exposed_containers():
 
     config_utils.set_exposed_containers(container, exposed)
     return jsonify({"message": "Exposed containers updated"}), 200
+
+@app.route("/api/config/proxy_count")
+def get_proxy_count():
+    proxy_count = config_utils.get_proxy_count()
+    return jsonify({"proxy_count": proxy_count})
+
+@app.route("/api/config/proxy_count", methods=["POST"])
+def set_proxy_count():
+    data = request.get_json()
+
+    if not data:
+        return jsonify({"error": "Invalid or missing JSON body"}), 400
+
+    proxy_count = data.get("proxy_count")
+
+    if proxy_count is None:
+        return jsonify({"error": "Missing proxy_count"}), 400
+
+    try:
+        proxy_count = int(proxy_count)
+        if proxy_count < 0:
+            return jsonify({"error": "Proxy count must be non-negative"}), 400
+    except ValueError:
+        return jsonify({"error": "Proxy count must be a valid integer"}), 400
+
+    config_utils.set_proxy_count(proxy_count)
+    return jsonify({"message": "Proxy count updated"}), 200
+
+@app.route("/api/config/internal_ip")
+def get_internal_ip():
+    internal_ip = config_utils.get_internal_ip()
+    return jsonify({"internal_ip": internal_ip})
+
+@app.route("/api/config/internal_ip", methods=["POST"])
+def set_internal_ip():
+    data = request.get_json()
+
+    if not data:
+        return jsonify({"error": "Invalid or missing JSON body"}), 400
+
+    internal_ip = data.get("internal_ip")
+
+    if not internal_ip:
+        return jsonify({"error": "Missing internal_ip"}), 400
+
+    config_utils.set_internal_ip(internal_ip)
+    return jsonify({"message": "Internal IP updated"}), 200
+
+@app.route("/api/config/external_ip")
+def get_external_ip():
+    external_ip = config_utils.get_external_ip()
+    return jsonify({"external_ip": external_ip})
+
+@app.route("/api/config/external_ip", methods=["POST"])
+def set_external_ip():
+    data = request.get_json()
+
+    if not data:
+        return jsonify({"error": "Invalid or missing JSON body"}), 400
+
+    external_ip = data.get("external_ip")
+
+    if not external_ip:
+        return jsonify({"error": "Missing external_ip"}), 400
+
+    config_utils.set_external_ip(external_ip)
+    return jsonify({"message": "External IP updated"}), 200
