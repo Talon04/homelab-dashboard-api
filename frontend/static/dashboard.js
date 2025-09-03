@@ -143,14 +143,52 @@ await window.renderComposeList();
       console.warn("Error getting exposed containers:", err);
     }
 
-    // Adding links based on preferred port and exposed status
+    // Check for custom link bodies (internal and external separately)
+    let customInternalLinkBody = null;
+    let customExternalLinkBody = null;
+    
+    try {
+      const internalLinkRes = await fetch(`/api/config/link_bodies/${container.id}`);
+      const internalLinkData = await internalLinkRes.json();
+      
+      console.log(`DEBUG: Internal link data for ${container.id}:`, internalLinkData, typeof internalLinkData);
+      
+      if (typeof internalLinkData === 'string' && internalLinkData.trim() !== "") {
+        customInternalLinkBody = internalLinkData;
+        console.log(`DEBUG: Using custom internal link: ${customInternalLinkBody}`);
+      }
+    } catch (err) {
+      console.info("No custom internal link body found for", container.id, err);
+    }
+    
+    try {
+      const externalLinkRes = await fetch(`/api/config/external_link_bodies/${container.id}`);
+      const externalLinkData = await externalLinkRes.json();
+      
+      console.log(`DEBUG: External link data for ${container.id}:`, externalLinkData, typeof externalLinkData);
+      
+      if (typeof externalLinkData === 'string' && externalLinkData.trim() !== "") {
+        customExternalLinkBody = externalLinkData;
+        console.log(`DEBUG: Using custom external link: ${customExternalLinkBody}`);
+      }
+    } catch (err) {
+      console.info("No custom external link body found for", container.id, err);
+    }    // Adding links based on preferred port and exposed status
     let internalLinkHTML = "";
     if (preferredPort !== undefined) {
-      internalLinkHTML = `Internal Link: <a href="http://${IP_FOR_INTERNAL_LINKS}:${preferredPort}" target="_blank" class="text-blue-600 underline">${IP_FOR_INTERNAL_LINKS}:${preferredPort}</a>`;
+      const internalUrl = customInternalLinkBody || `http://${IP_FOR_INTERNAL_LINKS}:${preferredPort}`;
+      internalLinkHTML = `Internal Link: <a href="${internalUrl}" target="_blank" class="text-blue-600 underline">${internalUrl}</a>
+      <button onclick="editLink('${container.id}', 'internal')" class="ml-2 text-gray-500 hover:text-blue-600" title="Edit custom link">
+        ✏️
+      </button>`;
     }
     let externalLinkHTML = "";
     if (preferredPort !== undefined && isExposed) {
-      externalLinkHTML = `<br>External Link: <a href="http://${IP_FOR_EXPOSED_LINKS}:${preferredPort}" target="_blank" class="text-blue-600 underline">${IP_FOR_EXPOSED_LINKS}:${preferredPort}</a>`;
+      const externalUrl = customExternalLinkBody || `http://${IP_FOR_EXPOSED_LINKS}:${preferredPort}`;
+      externalLinkHTML = `<br>External Link: <a href="${externalUrl}" target="_blank" class="text-blue-600 underline">${externalUrl}</a>
+      <button onclick="editLink('${container.id}', 'external')" class="ml-2 text-gray-500 hover:text-blue-600" title="Edit custom link">
+        ✏️
+      </button>`;
     }
 
     // Actual container div
@@ -190,14 +228,20 @@ window.setPreferredPort = async function(containerId, port) {
       })
     });
     
-    if (!res.ok) throw new Error("Failed to update preferred port");
+    if (!res.ok) {
+      const errorData = await res.json().catch(() => ({}));
+      throw new Error(errorData.error || "Failed to update preferred port");
+    }
     
     // Store current expanded state and refresh
     const currentExpanded = expandedCompose;
     expandedCompose = currentExpanded;
     await window.renderComposeList();
+    
+    window.toastManager.success(`Preferred port set to ${port}`);
   } catch (err) {
     console.error("Error setting preferred port:", err);
+    window.toastManager.error('Failed to set preferred port: ' + err.message);
   }
 };
 
@@ -212,13 +256,164 @@ window.toggleExposed = async function(containerId, exposed) {
       })
     });
     
-    if (!res.ok) throw new Error("Failed to update exposed status");
+    if (!res.ok) {
+      const errorData = await res.json().catch(() => ({}));
+      throw new Error(errorData.error || "Failed to update exposed status");
+    }
+    
+    // Store current expanded state and refresh
+    const currentExpanded = expandedCompose;
+    expandedCompose = currentExpanded;
+    await window.renderComposeList();
+    
+    window.toastManager.success(`Container ${exposed ? 'exposed' : 'hidden'}`);
+  } catch (err) {
+    console.error("Error toggling exposed status:", err);
+    window.toastManager.error('Failed to update exposed status: ' + err.message);
+  }
+};
+
+window.editLink = async function(containerId, linkType) {
+  try {
+    // Get current custom link body based on type
+    let currentUrl = "";
+    let hasCustomLink = false;
+    
+    const apiEndpoint = linkType === 'internal' 
+      ? `/api/config/link_bodies/${containerId}`
+      : `/api/config/external_link_bodies/${containerId}`;
+    
+    try {
+      const linkRes = await fetch(apiEndpoint);
+      const linkData = await linkRes.json();
+      
+      console.log(`DEBUG: Edit ${linkType} link data for ${containerId}:`, linkData, typeof linkData);
+      
+      if (typeof linkData === 'string' && linkData.trim() !== "") {
+        currentUrl = linkData;
+        hasCustomLink = true;
+        console.log(`DEBUG: Edit using existing custom ${linkType} link: ${currentUrl}`);
+      }
+    } catch (err) {
+      console.info(`No existing custom ${linkType} link found`);
+    }
+    
+    // If no custom link, use default format
+    if (!currentUrl) {
+      // Get preferred port for default URL
+      try {
+        const portRes = await fetch(`/api/config/preferred_ports/${containerId}`);
+        const portData = await portRes.json();
+        const port = portData.preferred_port;
+        currentUrl = linkType === 'internal' 
+          ? `http://${IP_FOR_INTERNAL_LINKS}:${port}`
+          : `http://${IP_FOR_EXPOSED_LINKS}:${port}`;
+      } catch (err) {
+        currentUrl = linkType === 'internal' 
+          ? `http://${IP_FOR_INTERNAL_LINKS}:8080`
+          : `http://${IP_FOR_EXPOSED_LINKS}:8080`;
+      }
+    }
+    
+    const title = hasCustomLink ? 'Edit Custom Link' : 'Set Custom Link';
+    const message = hasCustomLink 
+      ? `Editing custom ${linkType} link. Leave empty to reset to default.`
+      : `Enter a custom ${linkType} link for this container.`;
+    
+    window.modalManager.prompt(
+      title,
+      message,
+      currentUrl,
+      async (newUrl) => {
+        // Handle the user's input
+        if (newUrl.trim() === "" && hasCustomLink) {
+          // User wants to reset to default - clear the custom link
+          await clearCustomLink(containerId, linkType);
+          window.toastManager.success(`${linkType.charAt(0).toUpperCase() + linkType.slice(1)} link reset to default`);
+        } else if (newUrl && newUrl !== currentUrl) {
+          // User entered a new URL
+          await setCustomLink(containerId, newUrl, linkType);
+          window.toastManager.success(`Custom ${linkType} link saved`);
+        }
+      },
+      null, // onCancel - do nothing
+      {
+        label: `${linkType.charAt(0).toUpperCase() + linkType.slice(1)} Link URL`,
+        placeholder: 'Enter URL (e.g., http://example.com or mydomain.local)',
+        confirmText: 'Save Link'
+      }
+    );
+    
+  } catch (err) {
+    console.error("Error editing link:", err);
+    window.toastManager.error('Failed to edit link: ' + err.message);
+  }
+};
+
+async function setCustomLink(containerId, customUrl, linkType) {
+  try {
+    // Ensure URL has a protocol
+    let normalizedUrl = customUrl.trim();
+    if (normalizedUrl && !normalizedUrl.startsWith('http://') && !normalizedUrl.startsWith('https://')) {
+      normalizedUrl = 'http://' + normalizedUrl;
+    }
+    
+    const apiEndpoint = linkType === 'internal' 
+      ? "/api/config/link_bodies"
+      : "/api/config/external_link_bodies";
+    
+    const res = await fetch(apiEndpoint, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        container_id: containerId,
+        link_body: normalizedUrl
+      })
+    });
+    
+    if (!res.ok) {
+      const errorData = await res.json().catch(() => ({}));
+      throw new Error(errorData.error || `Failed to update custom ${linkType} link`);
+    }
     
     // Store current expanded state and refresh
     const currentExpanded = expandedCompose;
     expandedCompose = currentExpanded;
     await window.renderComposeList();
   } catch (err) {
-    console.error("Error toggling exposed status:", err);
+    console.error(`Error setting custom ${linkType} link:`, err);
+    window.toastManager.error(`Failed to save custom ${linkType} link: ` + err.message);
+    throw err; // Re-throw so caller can handle it
+  }
+};
+
+async function clearCustomLink(containerId, linkType) {
+  try {
+    const apiEndpoint = linkType === 'internal' 
+      ? "/api/config/link_bodies"
+      : "/api/config/external_link_bodies";
+    
+    const res = await fetch(apiEndpoint, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        container_id: containerId,
+        link_body: "" // Send empty string to clear
+      })
+    });
+    
+    if (!res.ok) {
+      const errorData = await res.json().catch(() => ({}));
+      throw new Error(errorData.error || `Failed to clear custom ${linkType} link`);
+    }
+    
+    // Store current expanded state and refresh
+    const currentExpanded = expandedCompose;
+    expandedCompose = currentExpanded;
+    await window.renderComposeList();
+  } catch (err) {
+    console.error(`Error clearing custom ${linkType} link:`, err);
+    window.toastManager.error(`Failed to reset ${linkType} link: ` + err.message);
+    throw err;
   }
 };

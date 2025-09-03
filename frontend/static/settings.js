@@ -5,11 +5,20 @@ window.addEventListener("DOMContentLoaded", async () => {
   
   // Event listeners
   document.getElementById("save-settings").addEventListener("click", saveSettings);
+  document.getElementById("complete-setup").addEventListener("click", completeSetup);
   document.getElementById("reset-settings").addEventListener("click", resetSettings);
 });
 
 async function loadSettings() {
   try {
+    // Check if this is first boot
+    const firstBootRes = await fetch("/api/config/first_boot");
+    const firstBootData = await firstBootRes.json();
+    
+    if (firstBootData.first_boot) {
+      document.getElementById("first-boot-banner").classList.remove("hidden");
+    }
+    
     // Load internal IP configuration
     const internalIpRes = await fetch("/api/config/internal_ip");
     const internalIpData = await internalIpRes.json();
@@ -112,6 +121,37 @@ async function saveSettings() {
   } catch (err) {
     console.error("Failed to save settings:", err);
     showStatus("Failed to save settings: " + err.message, "error");
+  }
+}
+
+async function completeSetup() {
+  try {
+    // First save current settings
+    await saveSettings();
+    
+    // Then set first_boot to false
+    const res = await fetch("/api/config/first_boot", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        first_boot: false
+      })
+    });
+    
+    if (!res.ok) {
+      throw new Error("Failed to complete setup");
+    }
+    
+    showStatus("Setup completed successfully! Redirecting to dashboard...", "success");
+    
+    // Redirect to dashboard after a short delay
+    setTimeout(() => {
+      window.location.href = "/";
+    }, 2000);
+    
+  } catch (err) {
+    console.error("Failed to complete setup:", err);
+    showStatus("Failed to complete setup: " + err.message, "error");
   }
 }
 

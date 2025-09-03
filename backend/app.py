@@ -15,6 +15,10 @@ if proxy_count > 0:
 
 @app.route("/")
 def index():
+    # Check if this is the first boot
+    if config_utils.get_first_boot():
+        from flask import redirect, url_for
+        return redirect(url_for('settings'))
     return render_template("index.html")
 
 @app.route("/settings")
@@ -51,6 +55,7 @@ def set_preferred_port():
 def get_link_body(container_id):
     link_body = config_utils.get_link_body(container_id)
     return jsonify(link_body)
+
 @app.route("/api/config/link_bodies", methods = ["POST"])
 def set_link_body():
     data = request.get_json()
@@ -65,7 +70,28 @@ def set_link_body():
         return jsonify({"error": "Missing data"}), 400
     
     config_utils.set_link_body(container_id,link_body)
-    return jsonify({"message": "Link Body saved"}), 200
+    return jsonify({"message": "Internal Link Body saved"}), 200
+
+@app.route("/api/config/external_link_bodies/<container_id>")
+def get_external_link_body(container_id):
+    link_body = config_utils.get_external_link_body(container_id)
+    return jsonify(link_body)
+
+@app.route("/api/config/external_link_bodies", methods = ["POST"])
+def set_external_link_body():
+    data = request.get_json()
+
+    if not data:
+        return jsonify({"error": "Invalid or missing JSON body"}), 400
+    
+    container_id = data.get("container_id")
+    link_body = data.get("link_body")
+
+    if not container_id or not link_body:
+        return jsonify({"error": "Missing data"}), 400
+    
+    config_utils.set_external_link_body(container_id, link_body)
+    return jsonify({"message": "External Link Body saved"}), 200
 @app.route("/api/config/exposed_containers")
 def get_exposed_containers():
     exposed_containers = config_utils.get_exposed_containers()
@@ -152,3 +178,23 @@ def set_external_ip():
 
     config_utils.set_external_ip(external_ip)
     return jsonify({"message": "External IP updated"}), 200
+
+@app.route("/api/config/first_boot")
+def get_first_boot():
+    first_boot = config_utils.get_first_boot()
+    return jsonify({"first_boot": first_boot})
+
+@app.route("/api/config/first_boot", methods=["POST"])
+def set_first_boot():
+    data = request.get_json()
+
+    if not data:
+        return jsonify({"error": "Invalid or missing JSON body"}), 400
+
+    first_boot = data.get("first_boot")
+
+    if first_boot is None:
+        return jsonify({"error": "Missing first_boot"}), 400
+
+    config_utils.set_first_boot(first_boot)
+    return jsonify({"message": "First boot flag updated"}), 200
