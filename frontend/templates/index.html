@@ -10,9 +10,14 @@
   <div class="container mx-auto p-4">
     <div class="flex items-center justify-between mb-6">
       <h1 class="text-2xl font-bold">Homelab Dashboard</h1>
-      <a href="/settings" class="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600">
-        Settings
-      </a>
+      <div class="flex gap-2">
+        <a href="/backup" id="backup-link" class="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600 hidden">
+          Backup View
+        </a>
+        <a href="/settings" class="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600">
+          Settings
+        </a>
+      </div>
     </div>
     <div id="container-list"></div>
   </div>

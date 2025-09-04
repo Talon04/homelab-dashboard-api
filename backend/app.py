@@ -3,6 +3,7 @@ from flask import Flask, render_template, jsonify, request
 from werkzeug.middleware.proxy_fix import ProxyFix
 import config_utils
 import docker_utils
+from log_parser import BackupLogParser, SmartDataParser
 
 app = Flask(__name__, template_folder='../frontend/templates', static_folder='../frontend/static')
 
@@ -24,6 +25,14 @@ def index():
 @app.route("/settings")
 def settings():
     return render_template("settings.html")
+
+@app.route("/backup")
+def backup():
+    # Check if backup view is enabled
+    if not config_utils.get_backup_view_enabled():
+        from flask import redirect, url_for
+        return redirect(url_for('settings'))
+    return render_template("backup.html")
 
 @app.route("/api/containers")
 def containers():
@@ -198,3 +207,113 @@ def set_first_boot():
 
     config_utils.set_first_boot(first_boot)
     return jsonify({"message": "First boot flag updated"}), 200
+
+@app.route("/api/config/backup_view_enabled")
+def get_backup_view_enabled():
+    enabled = config_utils.get_backup_view_enabled()
+    return jsonify({"backup_view_enabled": enabled})
+
+@app.route("/api/config/backup_view_enabled", methods=["POST"])
+def set_backup_view_enabled():
+    data = request.get_json()
+
+    if not data:
+        return jsonify({"error": "Invalid or missing JSON body"}), 400
+
+    enabled = data.get("backup_view_enabled")
+
+    if enabled is None:
+        return jsonify({"error": "Missing backup_view_enabled"}), 400
+
+    config_utils.set_backup_view_enabled(enabled)
+    return jsonify({"message": "Backup view enabled flag updated"}), 200
+
+@app.route("/api/config/backup_config")
+def get_backup_config():
+    backup_config = config_utils.get_backup_config()
+    return jsonify({"backup_config": backup_config})
+
+@app.route("/api/config/backup_config", methods=["POST"])
+def set_backup_config():
+    data = request.get_json()
+
+    if not data:
+        return jsonify({"error": "Invalid or missing JSON body"}), 400
+
+    backup_config = data.get("backup_config")
+
+    if backup_config is None:
+        return jsonify({"error": "Missing backup_config"}), 400
+
+    config_utils.set_backup_config(backup_config)
+    return jsonify({"message": "Backup configuration updated"}), 200
+
+# Backup data endpoints
+@app.route("/api/backup/summary")
+def get_backup_summary():
+    """Get backup summary statistics"""
+    try:
+        parser = BackupLogParser()
+        summary = parser.get_backup_summary()
+        return jsonify(summary)
+    except Exception as e:
+        import traceback
+        print(f"Error getting backup summary: {e}")
+        print(f"Traceback: {traceback.format_exc()}")
+        return jsonify({
+            "error": "Failed to get backup summary",
+            "details": str(e),
+            "total_backups": 0,
+            "status": "error"
+        }), 500
+
+@app.route("/api/backup/logs")
+def get_backup_logs():
+    """Get all backup logs"""
+    try:
+        parser = BackupLogParser()
+        logs = parser.parse_logs()
+        return jsonify({"backups": logs})
+    except Exception as e:
+        print(f"Error getting backup logs: {e}")
+        return jsonify({"error": "Failed to get backup logs"}), 500
+
+@app.route("/api/backup/latest")
+def get_latest_backup():
+    """Get the latest backup information"""
+    try:
+        parser = BackupLogParser()
+        latest = parser.get_latest_backup()
+        if latest:
+            return jsonify(latest)
+        else:
+            return jsonify({"message": "No backup data found"}), 404
+    except Exception as e:
+        print(f"Error getting latest backup: {e}")
+        return jsonify({"error": "Failed to get latest backup"}), 500
+
+# SMART data endpoints
+@app.route("/api/smart/summary")
+def get_smart_summary():
+    """Get SMART data summary"""
+    try:
+        parser = SmartDataParser()
+        summary = parser.get_drive_summary()
+        return jsonify(summary)
+    except Exception as e:
+        print(f"Error getting SMART summary: {e}")
+        return jsonify({"error": "Failed to get SMART data summary"}), 500
+
+@app.route("/api/smart/drives")
+def get_smart_drives():
+    """Get all drive SMART data"""
+    try:
+        parser = SmartDataParser()
+        drives = parser.parse_logs()
+        return jsonify({"drives": drives})
+    except Exception as e:
+        print(f"Error getting SMART drives data: {e}")
+        return jsonify({"error": "Failed to get SMART drives data"}), 500
+
+if __name__ == "__main__":
+    app.run(debug=True, host="0.0.0.0")

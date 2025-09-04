@@ -118,15 +118,33 @@ def get_internal_ip():
     return config_manager.get("internal_ip", "127.0.0.1")
 
 def set_internal_ip(ip):
+    # Get the old internal IP before changing it
+    old_internal_ip = get_internal_ip()
+    
+    # Set the new internal IP
     config_manager.set("internal_ip", ip)
     print(f"Internal IP set to {ip}")
+    
+    # Update all internal link bodies that reference the old IP
+    if old_internal_ip != ip:
+        _update_link_bodies_with_new_ip("internal_link_bodies", old_internal_ip, ip)
+        print(f"Updated internal link bodies from {old_internal_ip} to {ip}")
 
 def get_external_ip():
     return config_manager.get("external_ip", "127.0.0.1")
 
 def set_external_ip(ip):
+    # Get the old external IP before changing it
+    old_external_ip = get_external_ip()
+    
+    # Set the new external IP
     config_manager.set("external_ip", ip)
     print(f"External IP set to {ip}")
+    
+    # Update all external link bodies that reference the old IP
+    if old_external_ip != ip:
+        _update_link_bodies_with_new_ip("external_link_bodies", old_external_ip, ip)
+        print(f"Updated external link bodies from {old_external_ip} to {ip}")
 
 def get_first_boot():
     return config_manager.get("first_boot", False)
@@ -134,3 +152,71 @@ def get_first_boot():
 def set_first_boot(is_first_boot):
     config_manager.set("first_boot", is_first_boot)
     print(f"First boot flag set to {is_first_boot}")
+
+def get_backup_view_enabled():
+    return config_manager.get("backup_view_enabled", False)
+
+def set_backup_view_enabled(enabled):
+    config_manager.set("backup_view_enabled", enabled)
+    print(f"Backup view enabled set to {enabled}")
+
+def get_backup_config():
+    return config_manager.get("backup_config", {
+        "datetime_format": "%Y-%m-%d %H:%M:%S",
+        "keywords": {
+            "archive_name": "Archive name",
+            "repository": "Repository", 
+            "location": "Location",
+            "backup_size": "This archive",
+            "original_size": "Original size",
+            "compressed_size": "Compressed size",
+            "deduplicated_size": "Deduplicated size",
+            "number_files": "Number of files",
+            "added_files": "Added files",
+            "modified_files": "Modified files",
+            "unchanged_files": "Unchanged files",
+            "duration": "Duration",
+            "start_time": "Start time",
+            "end_time": "End time",
+            "status": "terminating with"
+        },
+        "backup_auto_refresh": False,
+        "backup_refresh_interval": 5,
+        "smart_auto_refresh": False,
+        "smart_refresh_interval": 10,
+        "smart_log_format": "smartctl-json",
+        "smart_datetime_format": "%Y-%m-%d %H:%M:%S",
+        "smart_temp_monitoring": True,
+        "smart_health_monitoring": True,
+        "smart_attribute_monitoring": True
+    })
+
+def set_backup_config(backup_config):
+    config_manager.set("backup_config", backup_config)
+    print(f"Backup configuration updated: {backup_config}")
+
+def _update_link_bodies_with_new_ip(link_bodies_key, old_ip, new_ip):
+    """
+    Helper function to update all link bodies that reference the old IP with the new IP.
+    This handles both exact IP matches and common URL patterns.
+    """
+    # Get the current link bodies
+    link_bodies = config_manager.get(link_bodies_key, {})
+    
+    updated_count = 0
+    for container_id, link_body in link_bodies.items():
+        if link_body and isinstance(link_body, str):
+            # Check if the link body contains the old IP
+            if old_ip in link_body:
+                # Replace the old IP with the new IP
+                updated_link_body = link_body.replace(old_ip, new_ip)
+                
+                # Update the link body in config
+                config_manager.set_nested(link_bodies_key, container_id, updated_link_body)
+                updated_count += 1
+                print(f"Updated {container_id}: {link_body} -> {updated_link_body}")
+    
+    if updated_count > 0:
+        print(f"Updated {updated_count} containers in {link_bodies_key}")
+    else:
+        print(f"No link bodies needed updating in {link_bodies_key}")

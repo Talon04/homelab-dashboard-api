@@ -39,7 +39,8 @@ class ConfigManager:
             "proxy_count": 0,
             "internal_ip": "127.0.0.1",
             "external_ip": "127.0.0.1",
-            "first_boot": True
+            "first_boot": True,
+            "backup_view_enabled": False,
         }
     
     def get(self, key: str, default: Any = None) -> Any:

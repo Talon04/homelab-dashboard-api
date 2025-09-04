@@ -10,4 +10,6 @@ services:
       - ./templates:/app/templates
       - ./static:/app/static
       - /var/run/docker.sock:/var/run/docker.sock
+     # - /path/to/backup/log/backup_logs:/app/backend/backup_logs #Incase you want to use the backup / smart log feature need to map paths where your logs are stored
+     # - /path/to/smart/log/smart_logs:/app/backend/smart_logs 
     restart: unless-stopped

@@ -3,15 +3,32 @@ let IP_FOR_EXPOSED_LINKS = "127.0.0.1";
 let expandedCompose = null;
 let composeMap = {};
 window.addEventListener("DOMContentLoaded", async () => {
-  // Load IP config first
+  // Load IP config first from separate endpoints
   try {
-    const configRes = await fetch("/api/config");
-    const configData = await configRes.json();
-    IP_FOR_INTERNAL_LINKS = configData.internal_ip;
-    IP_FOR_EXPOSED_LINKS = configData.external_ip;
+    const [internalRes, externalRes] = await Promise.all([
+      fetch("/api/config/internal_ip"),
+      fetch("/api/config/external_ip")
+    ]);
+    
+    if (internalRes.ok) {
+      const internalData = await internalRes.json();
+      IP_FOR_INTERNAL_LINKS = internalData.internal_ip;
+    }
+    
+    if (externalRes.ok) {
+      const externalData = await externalRes.json();
+      IP_FOR_EXPOSED_LINKS = externalData.external_ip;
+    }
+    
+    console.log(`Loaded IP config: Internal=${IP_FOR_INTERNAL_LINKS}, External=${IP_FOR_EXPOSED_LINKS}`);
   } catch (err) {
-    console.warn("Failed to load IP config, using defaults");
+    console.warn("Failed to load IP config, using defaults:", err);
   }
+
+      const backupLink = document.getElementById("backup-link");
+      if (backupLink) {
+        backupLink.classList.remove("hidden");
+      }
 
 
   // Build a map based on docker compose projects
