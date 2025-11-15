@@ -335,6 +335,7 @@ class SaveManager:
                             "label": w.label,
                             "text": w.text,
                             "file_path": w.file_path,
+                            "update_interval": w.update_interval,
                             "sort_order": w.sort_order
                         } for w in sorted(getattr(container, 'widgets', []) or [], key=lambda x: (x.sort_order or 0, x.id or 0))
                     ],
@@ -360,6 +361,7 @@ class SaveManager:
                     "label": w.label,
                     "text": w.text,
                     "file_path": w.file_path,
+                    "update_interval": w.update_interval,
                     "sort_order": w.sort_order
                 } for w in qs
             ]
@@ -377,6 +379,7 @@ class SaveManager:
                 label=(data.get('label') or None),
                 text=(data.get('text') or None),
                 file_path=(data.get('file_path') or None),
+                update_interval=(int(data.get('update_interval')) if data.get('update_interval') is not None else None),
                 sort_order=int(data.get('sort_order') or 0)
             )
             session.add(w)
@@ -388,6 +391,7 @@ class SaveManager:
                 "label": w.label,
                 "text": w.text,
                 "file_path": w.file_path,
+                "update_interval": w.update_interval,
                 "sort_order": w.sort_order
             }
 
@@ -400,7 +404,7 @@ class SaveManager:
             w = session.query(ContainerWidget).filter(ContainerWidget.id == widget_id, ContainerWidget.container_id == container_id).first()
             if not w:
                 return False
-            for key in ['type','size','label','text','file_path','sort_order']:
+            for key in ['type','size','label','text','file_path','update_interval','sort_order']:
                 if key in data:
                     setattr(w, key, data.get(key))
             return True
