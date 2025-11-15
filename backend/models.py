@@ -71,6 +71,7 @@ class ContainerWidget(Base):
     label = Column(String, nullable=True)  # for buttons
     text = Column(Text, nullable=True)     # for text widgets
     file_path = Column(String, nullable=True)  # associated script file under user_code
+    update_interval = Column(Integer, nullable=True)  # seconds between auto-refresh for text widgets (None = no auto-refresh)
     sort_order = Column(Integer, default=0)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

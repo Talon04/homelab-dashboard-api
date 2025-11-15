@@ -254,14 +254,16 @@ await window.renderComposeList();
     div.querySelector('[data-add-text]').addEventListener('click', async () => {
       const label = prompt('Text label (for identification)?', 'Text');
       const text = prompt('Initial text?','');
-      const file = `widgets/${container.id}/text_${Date.now()}.js`;
-      await fetch('/api/containers/'+encodeURIComponent(container.id)+'/widgets', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ type:'text', size:'md', label: label||'Text', text: text||'', file_path: file })});
+      const intervalStr = prompt('Auto-refresh interval in seconds (leave empty for no auto-refresh):', '');
+      const interval = intervalStr && !isNaN(parseInt(intervalStr)) ? parseInt(intervalStr) : null;
+      const file = `widgets/${container.id}/text_${Date.now()}.py`;  // Changed to .py
+      await fetch('/api/containers/'+encodeURIComponent(container.id)+'/widgets', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ type:'text', size:'md', label: label||'Text', text: text||'', file_path: file, update_interval: interval })});
       await renderWidgets();
       // Open editor if Ctrl pressed during add
     });
     div.querySelector('[data-add-button]').addEventListener('click', async () => {
       const label = prompt('Button label?','Action');
-      const file = `widgets/${container.id}/button_${Date.now()}.js`;
+      const file = `widgets/${container.id}/button_${Date.now()}.py`;  // Changed to .py
       await fetch('/api/containers/'+encodeURIComponent(container.id)+'/widgets', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ type:'button', size:'md', label: label||'Action', file_path: file })});
       await renderWidgets();
     });
@@ -278,7 +280,8 @@ await window.renderComposeList();
           header.className = 'flex items-center justify-between mb-1';
           const title = document.createElement('div');
           title.className = 'text-sm font-medium';
-          title.textContent = `${w.type === 'button' ? 'Button' : 'Text'}: ${w.label || ''}`;
+          const intervalText = w.update_interval ? ` (↻${w.update_interval}s)` : '';
+          title.textContent = `${w.type === 'button' ? 'Button' : 'Text'}: ${w.label || ''}${intervalText}`;
           const actions = document.createElement('div');
           actions.className = 'flex items-center gap-2';
           const del = document.createElement('button');
@@ -306,6 +309,35 @@ await window.renderComposeList();
               }
             });
             body.appendChild(p);
+            
+            // Auto-refresh for text widgets with update_interval
+            if (w.update_interval && w.update_interval > 0) {
+              const refreshWidget = async () => {
+                try {
+                  // Execute the Python script
+                  const resp = await fetch('/api/containers/'+encodeURIComponent(container.id)+'/widgets/'+w.id+'/run', {method:'POST'});
+                  const data = await resp.json();
+                  if (resp.ok && data.stdout) {
+                    // Update widget text with script output
+                    await fetch('/api/containers/'+encodeURIComponent(container.id)+'/widgets/'+w.id, {
+                      method:'PUT', 
+                      headers:{'Content-Type':'application/json'}, 
+                      body: JSON.stringify({ text: data.stdout.trim() })
+                    });
+                    // Update display
+                    p.textContent = data.stdout.trim();
+                  }
+                } catch(e) { 
+                  console.warn('Auto-refresh failed for widget', w.id, e); 
+                }
+              };
+              // Initial execution
+              refreshWidget();
+              // Set up interval
+              const intervalId = setInterval(refreshWidget, w.update_interval * 1000);
+              // Store interval ID so we can clear it later if needed
+              card.dataset.intervalId = intervalId;
+            }
           } else if (w.type === 'button'){
             const btn = document.createElement('button');
             btn.className = 'px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600';
@@ -316,8 +348,8 @@ await window.renderComposeList();
                 window.open('/code?path='+encodeURIComponent(w.file_path), '_blank');
                 return;
               }
-              // Run server or client depending on extension
-              if ((w.file_path||'').endsWith('.py')){
+              // Run server-side Python by default
+              if ((w.file_path||'').endsWith('.py') || !w.file_path){
                 try {
                   const resp = await fetch('/api/containers/'+encodeURIComponent(container.id)+'/widgets/'+w.id+'/run', {method:'POST'});
                   const data = await resp.json();
