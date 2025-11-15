@@ -45,6 +45,11 @@ class ConfigManager:
                     "token_secret": "",
                     "verify_ssl": True,
                     "node": ""
+                },
+                "code_editor": {
+                    "custom_js": "",
+                    "custom_css": "",
+                    "pages": ["containers"]
                 }
             }
         }

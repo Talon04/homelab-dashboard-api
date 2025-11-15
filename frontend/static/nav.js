@@ -33,6 +33,7 @@
     switch(id){
       case 'containers': return { href: '/containers', label: 'Containers' };
       case 'proxmox': return { href: '/proxmox', label: 'Proxmox' };
+      case 'code_editor': return { href: '/code', label: 'Code' };
       default: return null;
     }
   }

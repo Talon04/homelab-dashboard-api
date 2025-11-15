@@ -5,11 +5,13 @@
     "first_boot": false,
     "enabled_modules": [
         "proxmox",
-        "containers"
+        "containers",
+        "code_editor"
     ],
     "modules_order": [
         "proxmox",
-        "containers"
+        "containers",
+        "code_editor"
     ],
     "modules": {
         "proxmox": {
@@ -18,6 +20,11 @@
             "token_secret": "",
             "verify_ssl": true,
             "node": ""
+        },
+        "code_editor": {
+            "custom_js": "",
+            "custom_css": "",
+            "pages": []
         }
     }
 }

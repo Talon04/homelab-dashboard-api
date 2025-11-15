@@ -26,6 +26,8 @@ class Container(Base):
     
     # Relationship to container ports
     ports = relationship("ContainerPort", back_populates="container", cascade="all, delete-orphan")
+    # Relationship to widgets
+    widgets = relationship("ContainerWidget", back_populates="container", cascade="all, delete-orphan")
 
 class ContainerPort(Base):
     """Model for container port mappings"""
@@ -57,6 +59,23 @@ class VM(Base):
     is_exposed = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+class ContainerWidget(Base):
+    """Widgets attached to a container box in UI"""
+    __tablename__ = 'container_widgets'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    container_id = Column(String, ForeignKey('containers.id'), nullable=False)
+    type = Column(String, nullable=False)  # 'text' | 'button'
+    size = Column(String, default='md')    # 'sm' | 'md' | 'lg'
+    label = Column(String, nullable=True)  # for buttons
+    text = Column(Text, nullable=True)     # for text widgets
+    file_path = Column(String, nullable=True)  # associated script file under user_code
+    sort_order = Column(Integer, default=0)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    container = relationship("Container", back_populates="widgets")
 
 class DatabaseManager:
     """Database connection and session management"""

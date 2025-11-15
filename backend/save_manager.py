@@ -9,7 +9,7 @@ from typing import Any, Dict, List, Optional
 from contextlib import contextmanager
 
 try:
-    from models import DatabaseManager, Container, ContainerPort, VM
+    from models import DatabaseManager, Container, ContainerPort, VM, ContainerWidget
     from sqlalchemy.orm import Session
     from sqlalchemy import and_
 except ImportError:
@@ -18,6 +18,7 @@ except ImportError:
     Container = None
     ContainerPort = None
     VM = None
+    ContainerWidget = None
     Session = None
 
 class SaveManager:
@@ -326,11 +327,95 @@ class SaveManager:
                     "internal_link_body": container.internal_link_body,
                     "external_link_body": container.external_link_body,
                     "is_exposed": container.is_exposed,
+                    "widgets": [
+                        {
+                            "id": w.id,
+                            "type": w.type,
+                            "size": w.size,
+                            "label": w.label,
+                            "text": w.text,
+                            "file_path": w.file_path,
+                            "sort_order": w.sort_order
+                        } for w in sorted(getattr(container, 'widgets', []) or [], key=lambda x: (x.sort_order or 0, x.id or 0))
+                    ],
                     "created_at": container.created_at.isoformat() if container.created_at else None,
                     "updated_at": container.updated_at.isoformat() if container.updated_at else None
                 }
                 for container in containers
             ]
+
+    # Widgets CRUD
+    def get_widgets(self, container_id: str) -> List[Dict]:
+        if self.db_manager is None or ContainerWidget is None:
+            return []
+        with self.get_db_session() as session:
+            if session is None:
+                return []
+            qs = session.query(ContainerWidget).filter(ContainerWidget.container_id == container_id).order_by(ContainerWidget.sort_order, ContainerWidget.id).all()
+            return [
+                {
+                    "id": w.id,
+                    "type": w.type,
+                    "size": w.size,
+                    "label": w.label,
+                    "text": w.text,
+                    "file_path": w.file_path,
+                    "sort_order": w.sort_order
+                } for w in qs
+            ]
+
+    def add_widget(self, container_id: str, data: Dict[str, Any]) -> Optional[Dict]:
+        if self.db_manager is None or ContainerWidget is None:
+            return None
+        with self.get_db_session() as session:
+            if session is None:
+                return None
+            w = ContainerWidget(
+                container_id=container_id,
+                type=str(data.get('type') or 'text'),
+                size=str(data.get('size') or 'md'),
+                label=(data.get('label') or None),
+                text=(data.get('text') or None),
+                file_path=(data.get('file_path') or None),
+                sort_order=int(data.get('sort_order') or 0)
+            )
+            session.add(w)
+            session.flush()
+            return {
+                "id": w.id,
+                "type": w.type,
+                "size": w.size,
+                "label": w.label,
+                "text": w.text,
+                "file_path": w.file_path,
+                "sort_order": w.sort_order
+            }
+
+    def update_widget(self, container_id: str, widget_id: int, data: Dict[str, Any]) -> bool:
+        if self.db_manager is None or ContainerWidget is None:
+            return False
+        with self.get_db_session() as session:
+            if session is None:
+                return False
+            w = session.query(ContainerWidget).filter(ContainerWidget.id == widget_id, ContainerWidget.container_id == container_id).first()
+            if not w:
+                return False
+            for key in ['type','size','label','text','file_path','sort_order']:
+                if key in data:
+                    setattr(w, key, data.get(key))
+            return True
+
+    def delete_widget(self, container_id: str, widget_id: int) -> bool:
+        if self.db_manager is None or ContainerWidget is None:
+            return False
+        with self.get_db_session() as session:
+            if session is None:
+                return False
+            w = session.query(ContainerWidget).filter(ContainerWidget.id == widget_id, ContainerWidget.container_id == container_id).first()
+            if not w:
+                return False
+            session.delete(w)
+            return True
     
     # VM methods (for future use)
     def get_vm(self, vm_id: str) -> Optional[Dict]:

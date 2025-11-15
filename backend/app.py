@@ -8,6 +8,8 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import config_utils
 import docker_utils
+import code_editor_utils
+from save_manager import get_save_manager
 
 app = Flask(__name__, template_folder='../frontend/templates', static_folder='../frontend/static')
 
@@ -39,6 +41,75 @@ def containers_page():
 @app.route("/api/data/containers")
 def containers():
     return jsonify(docker_utils.list_containers())
+
+# Widgets APIs for containers
+@app.route("/api/containers/<container_id>/widgets")
+def get_container_widgets(container_id):
+    sm = get_save_manager()
+    return jsonify(sm.get_widgets(container_id))
+
+@app.route("/api/containers/<container_id>/widgets", methods=["POST"]) 
+def add_container_widget(container_id):
+    sm = get_save_manager()
+    data = request.get_json() or {}
+    w = sm.add_widget(container_id, data)
+    if not w:
+        return jsonify({"error": "Failed to add widget"}), 400
+    # Optional: scaffold default file if requested
+    fp = w.get('file_path')
+    if fp:
+        try:
+            code_editor_utils.ensure_scaffold(fp, w.get('type'))
+        except Exception:
+            pass
+    return jsonify(w)
+
+@app.route("/api/containers/<container_id>/widgets/<int:widget_id>", methods=["PUT"]) 
+def update_container_widget(container_id, widget_id):
+    sm = get_save_manager()
+    data = request.get_json() or {}
+    ok = sm.update_widget(container_id, widget_id, data)
+    return (jsonify({"ok": True}) if ok else (jsonify({"error": "Not found"}), 404))
+
+@app.route("/api/containers/<container_id>/widgets/<int:widget_id>", methods=["DELETE"]) 
+def delete_container_widget(container_id, widget_id):
+    sm = get_save_manager()
+    ok = sm.delete_widget(container_id, widget_id)
+    return (jsonify({"ok": True}) if ok else (jsonify({"error": "Not found"}), 404))
+
+@app.route("/api/containers/<container_id>/widgets/<int:widget_id>/run", methods=["POST"]) 
+def run_container_widget(container_id, widget_id):
+    sm = get_save_manager()
+    # Find widget to get file path and type
+    widgets = sm.get_widgets(container_id)
+    widget = next((w for w in widgets if w.get('id') == widget_id), None)
+    if not widget or not widget.get('file_path'):
+        return jsonify({"error": "Widget or file not found"}), 404
+    # Build context: include container info from docker_utils
+    try:
+        containers = docker_utils.list_containers()
+        ctx_container = next((c for c in containers if c.get('id') == container_id), None)
+    except Exception:
+        ctx_container = None
+    context = {
+        "container": ctx_container,
+        "widget": widget
+    }
+    path = widget.get('file_path')
+    if isinstance(path, str) and path.endswith('.py'):
+        # Run server-side python with context JSON passed via args
+        # Call run endpoint internally via function to avoid HTTP roundtrip
+        try:
+            import json as _json
+            data = { 'path': path, 'args': [_json.dumps(context)] }
+            with app.test_request_context('/api/code/run', method='POST', json=data):
+                resp = api_code_run()
+            return resp
+        except Exception as e:
+            return jsonify({"error": str(e)}), 400
+    else:
+        # For JS, client should fetch and execute with provided context
+        return jsonify({"message": "Client-run JS", "context": context, "path": path})
 @app.route("/api/containers/ports/<container_id>")
 @app.route("/api/data/containers/ports/<container_id>")
 def container_ports(container_id):
@@ -285,6 +356,84 @@ def proxmox_page():
         from flask import redirect, url_for
         return redirect(url_for('settings'))
     return render_template("proxmox.html")
+
+@app.route("/code")
+def code_editor_page():
+    modules = config_utils.get_enabled_modules()
+    if not modules or "code_editor" not in modules:
+        from flask import redirect, url_for
+        return redirect(url_for('settings'))
+    return render_template("code_editor.html")
+
+# Code editor APIs
+@app.route("/api/code/tree")
+def api_code_tree():
+    path = request.args.get('path', '')
+    try:
+        return jsonify(code_editor_utils.list_tree(path))
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
+
+@app.route("/api/code/file")
+def api_code_read_file():
+    path = request.args.get('path')
+    if not path:
+        return jsonify({"error": "Missing path"}), 400
+    try:
+        return jsonify(code_editor_utils.read_file(path))
+    except FileNotFoundError:
+        return jsonify({"error": "Not found"}), 404
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
+
+@app.route("/api/code/file", methods=["POST"])
+def api_code_write_file():
+    data = request.get_json() or {}
+    path = data.get('path')
+    content = data.get('content', '')
+    if not path:
+        return jsonify({"error": "Missing path"}), 400
+    try:
+        return jsonify(code_editor_utils.write_file(path, content))
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
+
+@app.route("/api/code/file", methods=["DELETE"])
+def api_code_delete_path():
+    path = request.args.get('path')
+    if not path:
+        return jsonify({"error": "Missing path"}), 400
+    try:
+        result = code_editor_utils.delete_path(path)
+        status = 200 if result.get('ok') else 400
+        return jsonify(result), status
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
+
+@app.route("/api/code/run", methods=["POST"])
+def api_code_run():
+    data = request.get_json() or {}
+    path = data.get('path')
+    args = data.get('args', [])
+    if not path:
+        return jsonify({"error": "Missing path"}), 400
+    try:
+        full_path = code_editor_utils._safe_path(path)
+        if not full_path.endswith('.py'):
+            return jsonify({"error": "Only .py files can be executed on server"}), 400
+        import subprocess
+        cmd = [sys.executable or 'python', full_path] + [str(a) for a in (args if isinstance(args, list) else [])]
+        proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        out, err = proc.communicate(timeout=60)
+        return jsonify({"stdout": out, "stderr": err, "code": proc.returncode})
+    except Exception as e:
+        try:
+            import subprocess as _sp
+            if isinstance(e, _sp.TimeoutExpired):
+                return jsonify({"error": "Execution timed out"}), 408
+        except Exception:
+            pass
+        return jsonify({"error": str(e)}), 400
 
 if __name__ == "__main__":
     app.run(debug=True, host="0.0.0.0")

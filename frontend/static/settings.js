@@ -228,7 +228,8 @@ async function loadModulesUI() {
         verify_ssl: { label: 'Verify SSL', type: 'checkbox' },
         node: { label: 'Node (optional)', type: 'text', placeholder: 'pve' }
       }
-    }
+    },
+    { id: 'code_editor', label: 'Code Editor' }
   ];
   let enabled = ["containers"];
   let order = ["containers"];

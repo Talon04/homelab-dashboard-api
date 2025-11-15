@@ -214,13 +214,139 @@ await window.renderComposeList();
     </button>`;
 
     div.innerHTML = `
-      <strong>${container.name}</strong> - ${container.status} ${exposedToggleBtn}<br>
+      <div class="flex items-center justify-between">
+        <div>
+          <strong>${container.name}</strong> - ${container.status} ${exposedToggleBtn}
+        </div>
+        <div class="flex items-center gap-2">
+          <button class="text-xs px-2 py-1 bg-gray-100 hover:bg-gray-200 rounded" title="Widget edit mode" data-widget-toggle>
+            <> Code
+          </button>
+        </div>
+      </div>
       <div class="mb-1">Image: <span class='font-mono text-xs'>${container.image || "-"}</span></div>
       <div class="mb-1">Ports: ${portText}</div>
       <div class="mt-2">${internalLinkHTML}</div>
       <div>${externalLinkHTML}</div>
+      <div class="mt-3 border-t pt-3">
+        <div class="flex items-center justify-between mb-2">
+          <span class="text-sm text-gray-600">Widgets</span>
+          <div class="hidden gap-2" data-widget-toolbar>
+            <button class="text-xs px-2 py-1 bg-blue-100 hover:bg-blue-200 rounded" data-add-text>Add Text</button>
+            <button class="text-xs px-2 py-1 bg-blue-100 hover:bg-blue-200 rounded" data-add-button>Add Button</button>
+          </div>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-2" data-widgets></div>
+      </div>
     `;
     parentDiv.appendChild(div);
+
+    // Hook up widget UI
+    const toolbar = div.querySelector('[data-widget-toolbar]');
+    const toggle = div.querySelector('[data-widget-toggle]');
+    const widgetsEl = div.querySelector('[data-widgets]');
+    let editMode = false;
+    toggle.addEventListener('click', async () => {
+      editMode = !editMode;
+      if (editMode) { toolbar.classList.remove('hidden'); await renderWidgets(); }
+      else { toolbar.classList.add('hidden'); await renderWidgets(); }
+    });
+    div.querySelector('[data-add-text]').addEventListener('click', async () => {
+      const label = prompt('Text label (for identification)?', 'Text');
+      const text = prompt('Initial text?','');
+      const file = `widgets/${container.id}/text_${Date.now()}.js`;
+      await fetch('/api/containers/'+encodeURIComponent(container.id)+'/widgets', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ type:'text', size:'md', label: label||'Text', text: text||'', file_path: file })});
+      await renderWidgets();
+      // Open editor if Ctrl pressed during add
+    });
+    div.querySelector('[data-add-button]').addEventListener('click', async () => {
+      const label = prompt('Button label?','Action');
+      const file = `widgets/${container.id}/button_${Date.now()}.js`;
+      await fetch('/api/containers/'+encodeURIComponent(container.id)+'/widgets', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ type:'button', size:'md', label: label||'Action', file_path: file })});
+      await renderWidgets();
+    });
+
+    async function renderWidgets(){
+      widgetsEl.innerHTML = '';
+      try{
+        const res = await fetch('/api/containers/'+encodeURIComponent(container.id)+'/widgets');
+        const widgets = res.ok ? await res.json() : [];
+        widgets.forEach(w => {
+          const card = document.createElement('div');
+          card.className = 'p-2 border rounded bg-gray-50';
+          const header = document.createElement('div');
+          header.className = 'flex items-center justify-between mb-1';
+          const title = document.createElement('div');
+          title.className = 'text-sm font-medium';
+          title.textContent = `${w.type === 'button' ? 'Button' : 'Text'}: ${w.label || ''}`;
+          const actions = document.createElement('div');
+          actions.className = 'flex items-center gap-2';
+          const del = document.createElement('button');
+          del.className = 'text-xs text-red-600 hover:underline';
+          del.textContent = 'Delete';
+          del.addEventListener('click', async () => {
+            if (!confirm('Delete widget?')) return;
+            await fetch('/api/containers/'+encodeURIComponent(container.id)+'/widgets/'+w.id, {method:'DELETE'});
+            await renderWidgets();
+          });
+          actions.appendChild(del);
+          header.appendChild(title);
+          header.appendChild(actions);
+          card.appendChild(header);
+
+          const body = document.createElement('div');
+          if (w.type === 'text'){
+            const p = document.createElement('div');
+            p.className = 'text-sm';
+            p.textContent = w.text || '';
+            p.title = 'Ctrl-Click to open script';
+            p.addEventListener('click', (ev) => {
+              if (ev.ctrlKey && w.file_path){
+                window.open('/code?path='+encodeURIComponent(w.file_path), '_blank');
+              }
+            });
+            body.appendChild(p);
+          } else if (w.type === 'button'){
+            const btn = document.createElement('button');
+            btn.className = 'px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600';
+            btn.textContent = w.label || 'Run';
+            btn.title = 'Click to run. Ctrl-Click opens script.';
+            btn.addEventListener('click', async (ev) => {
+              if (ev.ctrlKey && w.file_path){
+                window.open('/code?path='+encodeURIComponent(w.file_path), '_blank');
+                return;
+              }
+              // Run server or client depending on extension
+              if ((w.file_path||'').endsWith('.py')){
+                try {
+                  const resp = await fetch('/api/containers/'+encodeURIComponent(container.id)+'/widgets/'+w.id+'/run', {method:'POST'});
+                  const data = await resp.json();
+                  if (!resp.ok) throw new Error(data.error || 'Run failed');
+                  window.toastManager.info('Python script executed');
+                } catch(e){ window.toastManager.error(e.message); }
+              } else if ((w.file_path||'').endsWith('.js')) {
+                try {
+                  const file = await (await fetch('/api/code/file?path='+encodeURIComponent(w.file_path))).json();
+                  const code = file.content || '';
+                  const containersList = await (await fetch('/api/data/containers')).json();
+                  const ctxContainer = containersList.find(c => c.id === container.id) || null;
+                  const context = { container: ctxContainer, widget: w };
+                  const api = { setText: async (val) => { await fetch('/api/containers/'+encodeURIComponent(container.id)+'/widgets/'+w.id, {method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ text: String(val||'') })}); await renderWidgets(); } };
+                  new Function('context','api', code)(context, api);
+                } catch(e){ window.toastManager.error(e.message); }
+              } else {
+                window.toastManager.info('No script associated');
+              }
+            });
+            body.appendChild(btn);
+          }
+          card.appendChild(body);
+          widgetsEl.appendChild(card);
+        });
+      }catch(e){ console.warn('Widgets load failed', e); }
+    }
+    // Load widgets initially (not only in edit mode so users see them)
+    await renderWidgets();
   }
 
   // Initial render
