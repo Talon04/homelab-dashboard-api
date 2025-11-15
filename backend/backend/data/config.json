@@ -4,18 +4,17 @@
     "external_ip": "127.0.0.1",
     "first_boot": false,
     "enabled_modules": [
-        "proxmox",
         "containers",
         "code_editor"
     ],
     "modules_order": [
-        "proxmox",
         "containers",
+        "proxmox",
         "code_editor"
     ],
     "modules": {
         "proxmox": {
-            "api_url": "",
+            "api_url": "https://proxmox.example:8006/api2/json",
             "token_id": "",
             "token_secret": "",
             "verify_ssl": true,
@@ -24,7 +23,9 @@
         "code_editor": {
             "custom_js": "",
             "custom_css": "",
-            "pages": []
+            "pages": [
+                "containers"
+            ]
         }
     }
 }

@@ -5,7 +5,7 @@ import time
 from typing import Any, Dict, Optional
 
 class ConfigManager:
-    def __init__(self, config_path: str = "config/config.json"):
+    def __init__(self, config_path: str = "backend/data/config.json"):
         self.config_path = config_path
         self._config: Dict[str, Any] = {}
         self._lock = threading.RLock()

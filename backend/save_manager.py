@@ -1,10 +1,4 @@
-"""
-SaveManager - Centralized data persistence manager
-Handles both configuration (JSON) and data (SQLite database)
-"""
-import json
 import os
-import threading
 from typing import Any, Dict, List, Optional
 from contextlib import contextmanager
 
@@ -22,60 +16,17 @@ except ImportError:
     Session = None
 
 class SaveManager:
-    """Centralized manager for configuration and data persistence"""
-    
-    def __init__(self, config_file=None, db_path=None):
-        # Configuration file setup
-        if config_file is None:
-            config_dir = os.path.join(os.path.dirname(__file__), 'config')
-            os.makedirs(config_dir, exist_ok=True)
-            config_file = os.path.join(config_dir, 'config.json')
-        
-        self.config_file = config_file
-        self._config_lock = threading.Lock()
-        self._config = {}
-        
-        # Database setup
+    """Data persistence manager (SQLite only). Config JSON is handled elsewhere."""
+
+    def __init__(self, db_path: str = "backend/data/data.db"):
+        # Database setup only
         self.db_manager = None
         if DatabaseManager is not None:
             try:
                 self.db_manager = DatabaseManager(db_path)
             except Exception as e:
                 print(f"Warning: Could not initialize database: {e}")
-        
-        # Load initial configuration
-        self._load_config()
-    
-    def _load_config(self):
-        """Load configuration from JSON file"""
-        default_config = {
-            "proxy_count": 0,
-            "internal_ip": "127.0.0.1",
-            "external_ip": "127.0.0.1",
-            "first_boot": True,
-            "enabled_modules": ["containers"],
-            "modules_order": ["containers"],
-        }
-        
-        try:
-            if os.path.exists(self.config_file):
-                with open(self.config_file, 'r') as f:
-                    self._config = json.load(f)
-            else:
-                self._config = default_config.copy()
-                self._save_config()
-        except Exception as e:
-            print(f"Error loading config: {e}")
-            self._config = default_config.copy()
-    
-    def _save_config(self):
-        """Save configuration to JSON file"""
-        try:
-            os.makedirs(os.path.dirname(self.config_file), exist_ok=True)
-            with open(self.config_file, 'w') as f:
-                json.dump(self._config, f, indent=2)
-        except Exception as e:
-            print(f"Error saving config: {e}")
+
     
     @contextmanager
     def get_db_session(self):
@@ -94,65 +45,7 @@ class SaveManager:
         finally:
             self.db_manager.close_session(session)
     
-    # Configuration methods (JSON-based)
-    def get_config(self, key: str, default: Any = None) -> Any:
-        """Get a configuration value"""
-        with self._config_lock:
-            return self._config.get(key, default)
-    
-    def set_config(self, key: str, value: Any):
-        """Set a configuration value"""
-        with self._config_lock:
-            self._config[key] = value
-            self._save_config()
-    
-    # Specific configuration getters/setters
-    def get_proxy_count(self) -> int:
-        return self.get_config("proxy_count", 0)
-    
-    def set_proxy_count(self, count: int):
-        self.set_config("proxy_count", count)
-    
-    def get_internal_ip(self) -> str:
-        return self.get_config("internal_ip", "127.0.0.1")
-    
-    def set_internal_ip(self, ip: str):
-        self.set_config("internal_ip", ip)
-    
-    def get_external_ip(self) -> str:
-        return self.get_config("external_ip", "127.0.0.1")
-    
-    def set_external_ip(self, ip: str):
-        self.set_config("external_ip", ip)
-    
-    def get_first_boot(self) -> bool:
-        return self.get_config("first_boot", True)
-    
-    def set_first_boot(self, is_first_boot: bool):
-        self.set_config("first_boot", is_first_boot)
-
-    def get_enabled_modules(self) -> List[str]:
-        value = self.get_config("enabled_modules", ["containers"]) or []
-        if isinstance(value, list):
-            return [str(v) for v in value]
-        return ["containers"]
-
-    def set_enabled_modules(self, modules: List[str]):
-        if not isinstance(modules, list):
-            return
-        self.set_config("enabled_modules", [str(m) for m in modules])
-
-    def get_modules_order(self) -> List[str]:
-        value = self.get_config("modules_order", ["containers"]) or []
-        if isinstance(value, list) and value:
-            return [str(v) for v in value]
-        # fallback: order by enabled modules
-        return self.get_enabled_modules()
-
-    def set_modules_order(self, order: List[str]):
-        if not isinstance(order, list):
-            return
-        self.set_config("modules_order", [str(m) for m in order])
+    # No configuration (JSON) methods here. Use ConfigManager for config.
     
     # Container data methods (Database-based)
     def get_container(self, container_id: str) -> Optional[Dict]:

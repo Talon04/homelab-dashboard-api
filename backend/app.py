@@ -13,8 +13,6 @@ from save_manager import get_save_manager
 
 app = Flask(__name__, template_folder='../frontend/templates', static_folder='../frontend/static')
 
-config_utils.tryGenerateConfig()
-
 # Configure proxy fix based on config
 proxy_count = config_utils.get_proxy_count()
 if proxy_count > 0:

@@ -1,7 +1,7 @@
 import os
 from typing import Dict, Any, List, Optional
 
-CODE_ROOT = os.path.join(os.path.dirname(__file__), 'data', 'user_code')
+CODE_ROOT = os.path.join(os.path.dirname(__file__), 'backend/data', 'user_code')
 
 ALLOWED_BASE = CODE_ROOT
 

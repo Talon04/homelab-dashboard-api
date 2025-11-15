@@ -4,7 +4,6 @@ import docker_utils
 from save_manager import get_save_manager
 from config_manager import config_manager
 
-config_path = "config/config.json"
 default_ip = "127.0.0.1"
 
 
@@ -21,10 +20,6 @@ def guess_preferred_port(container_id):
     if ports and isinstance(ports, list) and len(ports) > 0:
         return ports[0].get("host_port", "default_port")
     return "null"
-
-def tryGenerateConfig():
-    # Config manager handles initialization automatically
-    print(f"Configuration loaded at {config_path}")
 
 def tryGeneratePreferredPorts():
     containers = docker_utils.list_containers()
