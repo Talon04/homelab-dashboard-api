@@ -32,15 +32,21 @@ class ConfigManager:
     def _get_default_config(self) -> Dict[str, Any]:
         """Get default configuration"""
         return {
-            "preferred_ports": {},
-            "internal_link_bodies": {},
-            "external_link_bodies": {},
-            "exposed_containers": [],
             "proxy_count": 0,
             "internal_ip": "127.0.0.1",
             "external_ip": "127.0.0.1",
             "first_boot": True,
-            "backup_view_enabled": False,
+            "enabled_modules": ["containers"],
+            "modules_order": ["containers", "proxmox"],
+            "modules": {
+                "proxmox": {
+                    "api_url": "https://proxmox.example:8006/api2/json",
+                    "token_id": "",
+                    "token_secret": "",
+                    "verify_ssl": True,
+                    "node": ""
+                }
+            }
         }
     
     def get(self, key: str, default: Any = None) -> Any:

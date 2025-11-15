@@ -7,20 +7,27 @@ window.addEventListener("DOMContentLoaded", async () => {
   document.getElementById("save-settings").addEventListener("click", saveSettings);
   document.getElementById("complete-setup").addEventListener("click", completeSetup);
   document.getElementById("reset-settings").addEventListener("click", resetSettings);
+  const saveModulesBtn = document.getElementById("save-modules");
+  if (saveModulesBtn) {
+    saveModulesBtn.addEventListener("click", saveModules);
+  }
   
-  // Backup view toggle
-  document.getElementById("backup-view-enabled").addEventListener("change", function() {
-    const subSettings = document.getElementById("backup-sub-settings");
-    if (this.checked) {
-      subSettings.classList.remove("hidden");
-    } else {
-      subSettings.classList.add("hidden");
-    }
-  });
+
 });
 
 async function loadSettings() {
   try {
+    // Load modules enabled + order and render list
+    await loadModulesUI();
+    // Update nav based on current modules
+    try {
+      const res = await fetch('/api/config/modules');
+      if (res.ok) {
+        const data = await res.json();
+        updateNavFromModules(Array.isArray(data.modules) ? data.modules : []);
+      }
+    } catch(e) {}
+
     // Check if this is first boot
     const firstBootRes = await fetch("/api/config/first_boot");
     const firstBootData = await firstBootRes.json();
@@ -41,77 +48,15 @@ async function loadSettings() {
     const proxyRes = await fetch("/api/config/proxy_count");
     const proxyData = await proxyRes.json();
     
-    // Load backup view configuration
-    const backupViewRes = await fetch("/api/config/backup_view_enabled");
-    const backupViewData = await backupViewRes.json();
-
-    // Load backup configuration settings
-    let backupConfigData = { backup_config: {} };
-    try {
-      const backupConfigRes = await fetch("/api/config/backup_config");
-      if (backupConfigRes.ok) {
-        backupConfigData = await backupConfigRes.json();
-      }
-    } catch (err) {
-      console.warn("Failed to load backup config, using defaults:", err);
-    }
-
     document.getElementById("internal-ip").value = internalIpData.internal_ip || "127.0.0.1";
     document.getElementById("external-ip").value = externalIpData.external_ip || "127.0.0.1";
     document.getElementById("proxy-count").value = proxyData.proxy_count || 0;
-    document.getElementById("backup-view-enabled").checked = backupViewData.backup_view_enabled || false;
     
-    // Load backup configuration fields
-    const config = backupConfigData.backup_config || {};
-    
-    // Date/Time format
-    document.getElementById("backup-datetime-format").value = config.datetime_format || "%Y-%m-%d %H:%M:%S";
-    
-    // BorgBackup keywords
-    document.getElementById("keyword-archive-name").value = config.keywords?.archive_name || "Archive name";
-    document.getElementById("keyword-repository").value = config.keywords?.repository || "Repository";
-    document.getElementById("keyword-location").value = config.keywords?.location || "Location";
-    document.getElementById("keyword-backup-size").value = config.keywords?.backup_size || "This archive";
-    document.getElementById("keyword-original-size").value = config.keywords?.original_size || "Original size";
-    document.getElementById("keyword-compressed-size").value = config.keywords?.compressed_size || "Compressed size";
-    document.getElementById("keyword-deduplicated-size").value = config.keywords?.deduplicated_size || "Deduplicated size";
-    document.getElementById("keyword-number-files").value = config.keywords?.number_files || "Number of files";
-    document.getElementById("keyword-added-files").value = config.keywords?.added_files || "Added files";
-    document.getElementById("keyword-modified-files").value = config.keywords?.modified_files || "Modified files";
-    document.getElementById("keyword-unchanged-files").value = config.keywords?.unchanged_files || "Unchanged files";
-    document.getElementById("keyword-duration").value = config.keywords?.duration || "Duration";
-    document.getElementById("keyword-start-time").value = config.keywords?.start_time || "Start time";
-    document.getElementById("keyword-end-time").value = config.keywords?.end_time || "End time";
-    document.getElementById("keyword-status").value = config.keywords?.status || "terminating with";
-    
-    // Auto-refresh settings
-    document.getElementById("backup-auto-refresh").checked = config.backup_auto_refresh || false;
-    document.getElementById("backup-refresh-interval").value = config.backup_refresh_interval || 5;
-    document.getElementById("smart-auto-refresh").checked = config.smart_auto_refresh || false;
-    document.getElementById("smart-refresh-interval").value = config.smart_refresh_interval || 10;
-    
-    // SMART data settings
-    document.getElementById("smart-log-format").value = config.smart_log_format || "smartctl-json";
-    document.getElementById("smart-datetime-format").value = config.smart_datetime_format || "%Y-%m-%d %H:%M:%S";
-    document.getElementById("smart-temp-monitoring").checked = config.smart_temp_monitoring !== false;
-    document.getElementById("smart-health-monitoring").checked = config.smart_health_monitoring !== false;
-    document.getElementById("smart-attribute-monitoring").checked = config.smart_attribute_monitoring !== false;
-    
-    // Show/hide backup sub-settings based on enabled state
-    const subSettings = document.getElementById("backup-sub-settings");
-    if (backupViewData.backup_view_enabled) {
-      subSettings.classList.remove("hidden");
-    } else {
-      subSettings.classList.add("hidden");
-    }
-
     // Store current settings
     currentSettings = {
       internal_ip: internalIpData.internal_ip || "127.0.0.1",
       external_ip: externalIpData.external_ip || "127.0.0.1",
-      proxy_count: proxyData.proxy_count || 0,
-      backup_view_enabled: backupViewData.backup_view_enabled || false,
-      backup_config: config
+      proxy_count: proxyData.proxy_count || 0
     };
     
   } catch (err) {
@@ -126,7 +71,6 @@ async function saveSettings() {
     const internalIp = document.getElementById("internal-ip").value.trim();
     const externalIp = document.getElementById("external-ip").value.trim();
     const proxyCount = parseInt(document.getElementById("proxy-count").value) || 0;
-    const backupViewEnabled = document.getElementById("backup-view-enabled").checked;
     
     // Validate inputs
     if (!isValidIP(internalIp)) {
@@ -182,71 +126,12 @@ async function saveSettings() {
     if (!proxyRes.ok) {
       throw new Error("Failed to save proxy settings");
     }
-    
-    // Save backup view enabled
-    const backupViewRes = await fetch("/api/config/backup_view_enabled", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        backup_view_enabled: backupViewEnabled
-      })
-    });
-    
-    if (!backupViewRes.ok) {
-      throw new Error("Failed to save backup view settings");
-    }
-
-    // Save backup configuration if backup view is enabled
-    if (backupViewEnabled) {
-      const backupConfig = {
-        datetime_format: document.getElementById("backup-datetime-format").value || "%Y-%m-%d %H:%M:%S",
-        keywords: {
-          archive_name: document.getElementById("keyword-archive-name").value || "Archive name",
-          repository: document.getElementById("keyword-repository").value || "Repository",
-          location: document.getElementById("keyword-location").value || "Location",
-          backup_size: document.getElementById("keyword-backup-size").value || "This archive",
-          original_size: document.getElementById("keyword-original-size").value || "Original size",
-          compressed_size: document.getElementById("keyword-compressed-size").value || "Compressed size",
-          deduplicated_size: document.getElementById("keyword-deduplicated-size").value || "Deduplicated size",
-          number_files: document.getElementById("keyword-number-files").value || "Number of files",
-          added_files: document.getElementById("keyword-added-files").value || "Added files",
-          modified_files: document.getElementById("keyword-modified-files").value || "Modified files",
-          unchanged_files: document.getElementById("keyword-unchanged-files").value || "Unchanged files",
-          duration: document.getElementById("keyword-duration").value || "Duration",
-          start_time: document.getElementById("keyword-start-time").value || "Start time",
-          end_time: document.getElementById("keyword-end-time").value || "End time",
-          status: document.getElementById("keyword-status").value || "terminating with"
-        },
-        backup_auto_refresh: document.getElementById("backup-auto-refresh").checked,
-        backup_refresh_interval: parseInt(document.getElementById("backup-refresh-interval").value) || 5,
-        smart_auto_refresh: document.getElementById("smart-auto-refresh").checked,
-        smart_refresh_interval: parseInt(document.getElementById("smart-refresh-interval").value) || 10,
-        smart_log_format: document.getElementById("smart-log-format").value || "smartctl-json",
-        smart_datetime_format: document.getElementById("smart-datetime-format").value || "%Y-%m-%d %H:%M:%S",
-        smart_temp_monitoring: document.getElementById("smart-temp-monitoring").checked,
-        smart_health_monitoring: document.getElementById("smart-health-monitoring").checked,
-        smart_attribute_monitoring: document.getElementById("smart-attribute-monitoring").checked
-      };
-
-      const backupConfigRes = await fetch("/api/config/backup_config", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          backup_config: backupConfig
-        })
-      });
-
-      if (!backupConfigRes.ok) {
-        throw new Error("Failed to save backup configuration");
-      }
-    }
 
     // Update current settings
     currentSettings = {
       internal_ip: internalIp,
       external_ip: externalIp,
-      proxy_count: proxyCount,
-      backup_view_enabled: backupViewEnabled
+      proxy_count: proxyCount
     };
     
     showStatus("Settings saved successfully!", "success");
@@ -279,13 +164,217 @@ async function completeSetup() {
     
     // Redirect to dashboard after a short delay
     setTimeout(() => {
-      window.location.href = "/";
+      window.location.href = "/containers";
     }, 2000);
     
   } catch (err) {
     console.error("Failed to complete setup:", err);
     showStatus("Failed to complete setup: " + err.message, "error");
   }
+}
+
+async function saveModules() {
+  try {
+    const state = getModulesStateFromUI();
+    // Save enabled list
+    const res = await fetch("/api/config/modules", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ modules: state.enabled })
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || "Failed to save modules");
+    }
+    // Save order
+    const res2 = await fetch("/api/config/modules_order", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ order: state.order })
+    });
+    if (!res2.ok) {
+      const err2 = await res2.json().catch(() => ({}));
+      throw new Error(err2.error || "Failed to save modules order");
+    }
+    // Save per-module configs
+    for (const [mid, cfg] of Object.entries(state.configs || {})) {
+      const resCfg = await fetch(`/api/config/module/${mid}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(cfg)
+      });
+      if (!resCfg.ok) {
+        const e3 = await resCfg.json().catch(() => ({}));
+        throw new Error(e3.error || `Failed to save config for ${mid}`);
+      }
+    }
+    showStatus("Modules saved", "success");
+    updateNavFromModules(state.enabled);
+  } catch (err) {
+    console.error("Failed to save modules:", err);
+    showStatus("Failed to save modules: " + err.message, "error");
+  }
+}
+
+async function loadModulesUI() {
+  const list = document.getElementById('modules-list');
+  if (!list) return;
+  const available = [
+    { id: 'containers', label: 'Containers' },
+    { id: 'proxmox', label: 'Proxmox VMs', config: {
+        api_url: { label: 'API URL', type: 'text', placeholder: 'https://host:8006/api2/json' },
+        token_id: { label: 'Token ID', type: 'text', placeholder: 'root@pam!mytoken' },
+        token_secret: { label: 'Token Secret', type: 'password', placeholder: '********' },
+        verify_ssl: { label: 'Verify SSL', type: 'checkbox' },
+        node: { label: 'Node (optional)', type: 'text', placeholder: 'pve' }
+      }
+    }
+  ];
+  let enabled = ["containers"];
+  let order = ["containers"];
+  try {
+    const [modsRes, orderRes] = await Promise.all([
+      fetch('/api/config/modules'),
+      fetch('/api/config/modules_order')
+    ]);
+    if (modsRes.ok) {
+      const data = await modsRes.json();
+      if (Array.isArray(data.modules)) enabled = data.modules;
+    }
+    if (orderRes.ok) {
+      const data2 = await orderRes.json();
+      if (Array.isArray(data2.order) && data2.order.length) order = data2.order;
+    }
+  } catch (e) {
+    // keep defaults
+  }
+  // Render according to order
+  list.innerHTML = '';
+  const byId = Object.fromEntries(available.map(m => [m.id, m]));
+  const ordered = order.filter(id => byId[id]).concat(available.map(m => m.id).filter(id => !order.includes(id)));
+  for (let idx = 0; idx < ordered.length; idx++) {
+    const id = ordered[idx];
+    const meta = byId[id];
+    const row = document.createElement('div');
+    row.className = 'flex items-center gap-3';
+    row.dataset.moduleId = id;
+    const checkbox = document.createElement('input');
+    checkbox.type = 'checkbox';
+    checkbox.className = 'h-4 w-4';
+    checkbox.checked = enabled.includes(id);
+    const label = document.createElement('span');
+    label.textContent = meta.label;
+    const up = document.createElement('button');
+    up.type = 'button';
+    up.className = 'px-2 py-1 text-sm bg-gray-100 rounded hover:bg-gray-200';
+    up.textContent = '▲';
+    up.disabled = idx === 0;
+    up.addEventListener('click', () => moveModule(row, -1));
+    const down = document.createElement('button');
+    down.type = 'button';
+    down.className = 'px-2 py-1 text-sm bg-gray-100 rounded hover:bg-gray-200';
+    down.textContent = '▼';
+    down.disabled = idx === ordered.length - 1;
+    down.addEventListener('click', () => moveModule(row, +1));
+    row.appendChild(checkbox);
+    row.appendChild(label);
+    row.appendChild(up);
+    row.appendChild(down);
+    list.appendChild(row);
+
+    // Configuration panel per module (if defined)
+    if (meta.config) {
+      const details = document.createElement('details');
+      details.className = 'ml-6';
+      const summary = document.createElement('summary');
+      summary.className = 'cursor-pointer select-none text-gray-600';
+      summary.textContent = `Configure ${meta.label}`;
+      details.appendChild(summary);
+      const panel = document.createElement('div');
+      panel.className = 'mt-3 grid grid-cols-1 md:grid-cols-2 gap-3';
+
+      // Load module config
+      let modConfig = {};
+      try {
+        const resp = await fetch(`/api/config/module/${id}`);
+        if (resp.ok) modConfig = await resp.json();
+      } catch(e) {}
+
+      for (const [key, field] of Object.entries(meta.config)) {
+        const wrap = document.createElement('div');
+        const lab = document.createElement('label');
+        lab.className = 'block text-sm text-gray-700 mb-1';
+        lab.textContent = field.label;
+        wrap.appendChild(lab);
+        let input;
+        if (field.type === 'checkbox') {
+          input = document.createElement('input');
+          input.type = 'checkbox';
+          input.className = 'h-4 w-4';
+          input.checked = Boolean(modConfig[key] ?? (key === 'verify_ssl' ? true : false));
+        } else {
+          input = document.createElement('input');
+          input.type = field.type || 'text';
+          input.className = 'w-full px-3 py-2 border border-gray-300 rounded-md';
+          if (field.placeholder) input.placeholder = field.placeholder;
+          input.value = String(modConfig[key] ?? '');
+        }
+        input.dataset.moduleId = id;
+        input.dataset.configKey = key;
+        wrap.appendChild(input);
+        panel.appendChild(wrap);
+      }
+      details.appendChild(panel);
+      list.appendChild(details);
+    }
+  }
+}
+
+function moveModule(rowEl, delta) {
+  const parent = rowEl.parentElement;
+  if (!parent) return;
+  const nodes = Array.from(parent.children);
+  const idx = nodes.indexOf(rowEl);
+  const newIdx = idx + delta;
+  if (newIdx < 0 || newIdx >= nodes.length) return;
+  parent.insertBefore(rowEl, delta < 0 ? nodes[newIdx] : nodes[newIdx].nextSibling);
+  // Update disabled states
+  Array.from(parent.children).forEach((el, i) => {
+    const buttons = el.querySelectorAll('button');
+    if (buttons.length === 2) {
+      buttons[0].disabled = i === 0;
+      buttons[1].disabled = i === parent.children.length - 1;
+    }
+  });
+}
+
+function getModulesStateFromUI() {
+  const list = document.getElementById('modules-list');
+  const rows = Array.from(list ? list.querySelectorAll('div[data-module-id]') : []);
+  const order = rows.map(el => el.dataset.moduleId);
+  const enabled = rows.filter(el => el.querySelector('input[type="checkbox"]').checked).map(el => el.dataset.moduleId);
+  // Collect per-module configs
+  const configs = {};
+  const inputs = Array.from(list ? list.querySelectorAll('[data-module-id][data-config-key]') : []);
+  inputs.forEach(inp => {
+    const mid = inp.dataset.moduleId;
+    const key = inp.dataset.configKey;
+    const val = inp.type === 'checkbox' ? inp.checked : inp.value;
+    if (!configs[mid]) configs[mid] = {};
+    configs[mid][key] = val;
+  });
+  return { order, enabled, configs };
+}
+
+function updateNavFromModules(enabled) {
+  const showContainers = Array.isArray(enabled) && enabled.includes('containers');
+  document.querySelectorAll('a[href="/containers"]').forEach(el => {
+    if (showContainers) {
+      el.classList.remove('hidden');
+    } else {
+      el.classList.add('hidden');
+    }
+  });
 }
 
 async function resetSettings() {
@@ -332,104 +421,16 @@ async function resetSettings() {
     if (!proxyRes.ok) {
       throw new Error("Failed to reset proxy settings");
     }
-    
-    // Reset backup view to disabled
-    const backupViewRes = await fetch("/api/config/backup_view_enabled", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        backup_view_enabled: false
-      })
-    });
-    
-    if (!backupViewRes.ok) {
-      throw new Error("Failed to reset backup view settings");
-    }
-
-    // Reset backup configuration to defaults
-    const defaultBackupConfig = {
-      datetime_format: "%Y-%m-%d %H:%M:%S",
-      keywords: {
-        archive_name: "Archive name",
-        repository: "Repository",
-        location: "Location",
-        backup_size: "This archive",
-        original_size: "Original size",
-        compressed_size: "Compressed size",
-        deduplicated_size: "Deduplicated size",
-        number_files: "Number of files",
-        added_files: "Added files",
-        modified_files: "Modified files",
-        unchanged_files: "Unchanged files",
-        duration: "Duration",
-        start_time: "Start time",
-        end_time: "End time",
-        status: "terminating with"
-      },
-      backup_auto_refresh: false,
-      backup_refresh_interval: 5,
-      smart_auto_refresh: false,
-      smart_refresh_interval: 10,
-      smart_log_format: "smartctl-json",
-      smart_datetime_format: "%Y-%m-%d %H:%M:%S",
-      smart_temp_monitoring: true,
-      smart_health_monitoring: true,
-      smart_attribute_monitoring: true
-    };
-
-    const backupConfigRes = await fetch("/api/config/backup_config", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        backup_config: defaultBackupConfig
-      })
-    });
-
-    if (!backupConfigRes.ok) {
-      throw new Error("Failed to reset backup configuration");
-    }
 
     // Reset form values
     document.getElementById("internal-ip").value = "127.0.0.1";
     document.getElementById("external-ip").value = "127.0.0.1";
     document.getElementById("proxy-count").value = 0;
-    document.getElementById("backup-view-enabled").checked = false;
-    
-    // Reset backup configuration form values
-    document.getElementById("backup-datetime-format").value = "%Y-%m-%d %H:%M:%S";
-    document.getElementById("keyword-archive-name").value = "Archive name";
-    document.getElementById("keyword-repository").value = "Repository";
-    document.getElementById("keyword-location").value = "Location";
-    document.getElementById("keyword-backup-size").value = "This archive";
-    document.getElementById("keyword-original-size").value = "Original size";
-    document.getElementById("keyword-compressed-size").value = "Compressed size";
-    document.getElementById("keyword-deduplicated-size").value = "Deduplicated size";
-    document.getElementById("keyword-number-files").value = "Number of files";
-    document.getElementById("keyword-added-files").value = "Added files";
-    document.getElementById("keyword-modified-files").value = "Modified files";
-    document.getElementById("keyword-unchanged-files").value = "Unchanged files";
-    document.getElementById("keyword-duration").value = "Duration";
-    document.getElementById("keyword-start-time").value = "Start time";
-    document.getElementById("keyword-end-time").value = "End time";
-    document.getElementById("keyword-status").value = "terminating with";
-    document.getElementById("backup-auto-refresh").checked = false;
-    document.getElementById("backup-refresh-interval").value = 5;
-    document.getElementById("smart-auto-refresh").checked = false;
-    document.getElementById("smart-refresh-interval").value = 10;
-    document.getElementById("smart-log-format").value = "smartctl-json";
-    document.getElementById("smart-datetime-format").value = "%Y-%m-%d %H:%M:%S";
-    document.getElementById("smart-temp-monitoring").checked = true;
-    document.getElementById("smart-health-monitoring").checked = true;
-    document.getElementById("smart-attribute-monitoring").checked = true;
-    
-    // Hide backup sub-settings
-    document.getElementById("backup-sub-settings").classList.add("hidden");
     
     currentSettings = {
       internal_ip: "127.0.0.1",
       external_ip: "127.0.0.1",
-      proxy_count: 0,
-      backup_view_enabled: false
+      proxy_count: 0
     };
     
     showStatus("Settings reset to defaults", "success");

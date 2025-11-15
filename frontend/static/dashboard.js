@@ -25,14 +25,8 @@ window.addEventListener("DOMContentLoaded", async () => {
     console.warn("Failed to load IP config, using defaults:", err);
   }
 
-      const backupLink = document.getElementById("backup-link");
-      if (backupLink) {
-        backupLink.classList.remove("hidden");
-      }
-
-
   // Build a map based on docker compose projects
-  const res = await fetch("/api/containers");
+  const res = await fetch("/api/data/containers");
   const data = await res.json();
   composeMap = {};
   const containerList = document.getElementById("container-list");
@@ -110,7 +104,7 @@ await window.renderComposeList();
 
     // Get ports for container
     try {
-      const portRes = await fetch(`/api/containers/ports/${container.id}`);
+      const portRes = await fetch(`/api/data/containers/ports/${container.id}`);
       const portData = await portRes.json();
       
       if (portData.length > 0) {
@@ -141,7 +135,7 @@ await window.renderComposeList();
     // Getting/initialising preferred Port
     let preferredPort = hostPorts[0];
     try {
-      const preferredPortRes = await fetch(`/api/config/preferred_ports/${container.id}`);
+      const preferredPortRes = await fetch(`/api/data/preferred_ports/${container.id}`);
       const preferredPortData = await preferredPortRes.json();
       if (preferredPortData.preferred_port !== undefined) {
         preferredPort = preferredPortData.preferred_port;
@@ -153,7 +147,7 @@ await window.renderComposeList();
     // Check if container is exposed
     let isExposed = false;
     try {
-      const exposedRes = await fetch("/api/config/exposed_containers");
+      const exposedRes = await fetch("/api/data/exposed_containers");
       const exposedContainers = await exposedRes.json();
       isExposed = exposedContainers.includes(container.id);
     } catch (err) {
@@ -165,7 +159,7 @@ await window.renderComposeList();
     let customExternalLinkBody = null;
     
     try {
-      const internalLinkRes = await fetch(`/api/config/link_bodies/${container.id}`);
+      const internalLinkRes = await fetch(`/api/data/link_bodies/${container.id}`);
       const internalLinkData = await internalLinkRes.json();
       
       console.log(`DEBUG: Internal link data for ${container.id}:`, internalLinkData, typeof internalLinkData);
@@ -179,7 +173,7 @@ await window.renderComposeList();
     }
     
     try {
-      const externalLinkRes = await fetch(`/api/config/external_link_bodies/${container.id}`);
+      const externalLinkRes = await fetch(`/api/data/external_link_bodies/${container.id}`);
       const externalLinkData = await externalLinkRes.json();
       
       console.log(`DEBUG: External link data for ${container.id}:`, externalLinkData, typeof externalLinkData);
@@ -236,7 +230,7 @@ await window.renderComposeList();
 // Helpers 
 window.setPreferredPort = async function(containerId, port) {
   try {
-    const res = await fetch("/api/config/preferred_ports", {
+    const res = await fetch("/api/data/preferred_ports", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -264,7 +258,7 @@ window.setPreferredPort = async function(containerId, port) {
 
 window.toggleExposed = async function(containerId, exposed) {
   try {
-    const res = await fetch("/api/config/exposed_containers", {
+    const res = await fetch("/api/data/exposed_containers", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -297,8 +291,8 @@ window.editLink = async function(containerId, linkType) {
     let hasCustomLink = false;
     
     const apiEndpoint = linkType === 'internal' 
-      ? `/api/config/link_bodies/${containerId}`
-      : `/api/config/external_link_bodies/${containerId}`;
+      ? `/api/data/link_bodies/${containerId}`
+      : `/api/data/external_link_bodies/${containerId}`;
     
     try {
       const linkRes = await fetch(apiEndpoint);
@@ -319,7 +313,7 @@ window.editLink = async function(containerId, linkType) {
     if (!currentUrl) {
       // Get preferred port for default URL
       try {
-        const portRes = await fetch(`/api/config/preferred_ports/${containerId}`);
+        const portRes = await fetch(`/api/data/preferred_ports/${containerId}`);
         const portData = await portRes.json();
         const port = portData.preferred_port;
         currentUrl = linkType === 'internal' 
@@ -376,8 +370,8 @@ async function setCustomLink(containerId, customUrl, linkType) {
     }
     
     const apiEndpoint = linkType === 'internal' 
-      ? "/api/config/link_bodies"
-      : "/api/config/external_link_bodies";
+      ? "/api/data/link_bodies"
+      : "/api/data/external_link_bodies";
     
     const res = await fetch(apiEndpoint, {
       method: "POST",
@@ -407,8 +401,8 @@ async function setCustomLink(containerId, customUrl, linkType) {
 async function clearCustomLink(containerId, linkType) {
   try {
     const apiEndpoint = linkType === 'internal' 
-      ? "/api/config/link_bodies"
-      : "/api/config/external_link_bodies";
+      ? "/api/data/link_bodies"
+      : "/api/data/external_link_bodies";
     
     const res = await fetch(apiEndpoint, {
       method: "POST",

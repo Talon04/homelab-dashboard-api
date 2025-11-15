@@ -1,10 +1,23 @@
 {
-    "preferred_ports": {
-        "mock_container_1": "8080",
-        "mock_container_3": "8080",
-        "mock_container_2": "8080",
-        "dadk\u00f6nfm": "8080",
-        "dadk\u00f6ndanwl\u00e4nfm": "8080",
-        "dadk\u00f6ndanwl\u00e4nfmdaw": "8080"
+    "proxy_count": 0,
+    "internal_ip": "127.0.0.1",
+    "external_ip": "127.0.0.1",
+    "first_boot": false,
+    "enabled_modules": [
+        "proxmox",
+        "containers"
+    ],
+    "modules_order": [
+        "proxmox",
+        "containers"
+    ],
+    "modules": {
+        "proxmox": {
+            "api_url": "",
+            "token_id": "",
+            "token_secret": "",
+            "verify_ssl": true,
+            "node": ""
+        }
     }
 }

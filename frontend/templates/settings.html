@@ -4,14 +4,35 @@
   <title>Homelab Dashboard - Settings</title>
   <script src="/static/settings.js" defer></script>
   <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', async () => {
+      try {
+        const res = await fetch('/api/config/modules');
+        if (res.ok) {
+          const data = await res.json();
+          const enabled = Array.isArray(data.modules) ? data.modules : [];
+          if (!enabled.includes('containers')) {
+            document.querySelectorAll('a[href="/containers"]').forEach(el => el.classList.add('hidden'));
+          }
+        }
+      } catch (e) {}
+    });
+  </script>
 </head>
 <body class="bg-gray-100">
   <div class="container mx-auto p-4">
-    <div class="flex items-center justify-between mb-6">
-      <h1 class="text-2xl font-bold">Settings</h1>
-      <a href="/" class="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600">
-        Back to Dashboard
-      </a>
+    <div class="grid grid-cols-3 items-center mb-6">
+      <div class="justify-self-start flex items-center gap-2">
+        <a id="nav-left-arrow" href="/containers" class="text-blue-600 hover:text-blue-800">◀</a>
+        <a id="nav-left-link" href="/containers" class="text-sm text-gray-700 hover:text-blue-700">Containers</a>
+      </div>
+      <div class="justify-self-center">
+        <h1 class="text-2xl font-bold text-center">Homelab Dashboard</h1>
+      </div>
+      <div class="justify-self-end flex items-center gap-2">
+        <a id="nav-right-link" href="/containers" class="text-sm text-gray-700 hover:text-blue-700">Containers</a>
+        <a id="nav-right-arrow" href="/containers" class="text-blue-600 hover:text-blue-800">▶</a>
+      </div>
     </div>
 
     <!-- First Time Setup Banner -->
@@ -61,6 +82,16 @@
     </div>
 
     <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+      <h2 class="text-xl font-semibold mb-4">Modules</h2>
+      <details class="mb-2">
+        <summary class="cursor-pointer select-none text-gray-700">Enable, disable, and reorder modules</summary>
+        <div id="modules-list" class="mt-4 space-y-2"></div>
+        <p class="text-sm text-gray-500 mt-2">Use the arrows to change order. Uncheck to disable.</p>
+      </details>
+      <button id="save-modules" class="mt-2 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600">Save Modules</button>
+    </div>
+
+    <div class="bg-white rounded-lg shadow-md p-6 mb-6">
       <h2 class="text-xl font-semibold mb-4">Proxy Configuration</h2>
       
       <div>
@@ -82,332 +113,6 @@
       </div>
     </div>
 
-    <!-- Backup View Configuration -->
-    <div class="bg-white rounded-lg shadow-md p-6">
-      <h2 class="text-xl font-semibold mb-4">Backup & System Monitoring</h2>
-      
-      <div class="mb-4">
-        <label class="flex items-center">
-          <input 
-            type="checkbox" 
-            id="backup-view-enabled"
-            class="rounded border-gray-300 text-blue-600 shadow-sm focus:border-blue-300 focus:ring focus:ring-blue-200 focus:ring-opacity-50"
-          >
-          <span class="ml-2 text-sm font-medium text-gray-700">Enable Backup & System View</span>
-        </label>
-        <p class="text-sm text-gray-600 mt-2">
-          Enables a dedicated page for monitoring backups and system health (SMART data, drive status, etc.)
-        </p>
-      </div>
-
-      <div id="backup-sub-settings" class="ml-6 space-y-4 hidden">
-        <div class="border-l-2 border-gray-200 pl-4">
-          <h3 class="text-lg font-medium text-gray-800 mb-4">Log Parsing Configuration</h3>
-          
-          <!-- Date/Time Format -->
-          <div class="mb-4">
-            <label for="backup-datetime-format" class="block text-sm font-medium text-gray-700 mb-2">
-              Date/Time Format in Logs
-            </label>
-            <input 
-              type="text" 
-              id="backup-datetime-format"
-              class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="%Y-%m-%d %H:%M:%S"
-              value="%Y-%m-%d %H:%M:%S"
-            >
-            <p class="text-xs text-gray-600 mt-1">Python strftime format (e.g., %Y-%m-%d %H:%M:%S for 2024-01-15 14:30:45)</p>
-          </div>
-
-          <!-- BorgBackup Keywords -->
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <h4 class="text-md font-medium text-gray-700 mb-3">Archive Information Keywords</h4>
-              <div class="space-y-3">
-                <div>
-                  <label for="keyword-archive-name" class="block text-xs font-medium text-gray-600 mb-1">
-                    Archive Name will be looked for by:
-                  </label>
-                  <input 
-                    type="text" 
-                    id="keyword-archive-name"
-                    class="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
-                    placeholder="Archive name"
-                    value="Archive name"
-                  >
-                </div>
-                <div>
-                  <label for="keyword-repository" class="block text-xs font-medium text-gray-600 mb-1">
-                    Repository will be looked for by:
-                  </label>
-                  <input 
-                    type="text" 
-                    id="keyword-repository"
-                    class="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
-                    placeholder="Repository"
-                    value="Repository"
-                  >
-                </div>
-                <div>
-                  <label for="keyword-location" class="block text-xs font-medium text-gray-600 mb-1">
-                    Location will be looked for by:
-                  </label>
-                  <input 
-                    type="text" 
-                    id="keyword-location"
-                    class="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
-                    placeholder="Location"
-                    value="Location"
-                  >
-                </div>
-              </div>
-            </div>
-
-            <div>
-              <h4 class="text-md font-medium text-gray-700 mb-3">Size & Performance Keywords</h4>
-              <div class="space-y-3">
-                <div>
-                  <label for="keyword-backup-size" class="block text-xs font-medium text-gray-600 mb-1">
-                    Backup Size will be looked for by:
-                  </label>
-                  <input 
-                    type="text" 
-                    id="keyword-backup-size"
-                    class="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
-                    placeholder="This archive"
-                    value="This archive"
-                  >
-                </div>
-                <div>
-                  <label for="keyword-original-size" class="block text-xs font-medium text-gray-600 mb-1">
-                    Original Size will be looked for by:
-                  </label>
-                  <input 
-                    type="text" 
-                    id="keyword-original-size"
-                    class="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
-                    placeholder="Original size"
-                    value="Original size"
-                  >
-                </div>
-                <div>
-                  <label for="keyword-compressed-size" class="block text-xs font-medium text-gray-600 mb-1">
-                    Compressed Size will be looked for by:
-                  </label>
-                  <input 
-                    type="text" 
-                    id="keyword-compressed-size"
-                    class="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
-                    placeholder="Compressed size"
-                    value="Compressed size"
-                  >
-                </div>
-                <div>
-                  <label for="keyword-deduplicated-size" class="block text-xs font-medium text-gray-600 mb-1">
-                    Deduplicated Size will be looked for by:
-                  </label>
-                  <input 
-                    type="text" 
-                    id="keyword-deduplicated-size"
-                    class="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
-                    placeholder="Deduplicated size"
-                    value="Deduplicated size"
-                  >
-                </div>
-              </div>
-            </div>
-
-            <div>
-              <h4 class="text-md font-medium text-gray-700 mb-3">File Count Keywords</h4>
-              <div class="space-y-3">
-                <div>
-                  <label for="keyword-number-files" class="block text-xs font-medium text-gray-600 mb-1">
-                    Number of Files will be looked for by:
-                  </label>
-                  <input 
-                    type="text" 
-                    id="keyword-number-files"
-                    class="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
-                    placeholder="Number of files"
-                    value="Number of files"
-                  >
-                </div>
-                <div>
-                  <label for="keyword-added-files" class="block text-xs font-medium text-gray-600 mb-1">
-                    Added Files will be looked for by:
-                  </label>
-                  <input 
-                    type="text" 
-                    id="keyword-added-files"
-                    class="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
-                    placeholder="Added files"
-                    value="Added files"
-                  >
-                </div>
-                <div>
-                  <label for="keyword-modified-files" class="block text-xs font-medium text-gray-600 mb-1">
-                    Modified Files will be looked for by:
-                  </label>
-                  <input 
-                    type="text" 
-                    id="keyword-modified-files"
-                    class="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
-                    placeholder="Modified files"
-                    value="Modified files"
-                  >
-                </div>
-                <div>
-                  <label for="keyword-unchanged-files" class="block text-xs font-medium text-gray-600 mb-1">
-                    Unchanged Files will be looked for by:
-                  </label>
-                  <input 
-                    type="text" 
-                    id="keyword-unchanged-files"
-                    class="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
-                    placeholder="Unchanged files"
-                    value="Unchanged files"
-                  >
-                </div>
-              </div>
-            </div>
-
-            <div>
-              <h4 class="text-md font-medium text-gray-700 mb-3">Status & Timing Keywords</h4>
-              <div class="space-y-3">
-                <div>
-                  <label for="keyword-duration" class="block text-xs font-medium text-gray-600 mb-1">
-                    Duration will be looked for by:
-                  </label>
-                  <input 
-                    type="text" 
-                    id="keyword-duration"
-                    class="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
-                    placeholder="Duration"
-                    value="Duration"
-                  >
-                </div>
-                <div>
-                  <label for="keyword-start-time" class="block text-xs font-medium text-gray-600 mb-1">
-                    Start Time will be looked for by:
-                  </label>
-                  <input 
-                    type="text" 
-                    id="keyword-start-time"
-                    class="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
-                    placeholder="Start time"
-                    value="Start time"
-                  >
-                </div>
-                <div>
-                  <label for="keyword-end-time" class="block text-xs font-medium text-gray-600 mb-1">
-                    End Time will be looked for by:
-                  </label>
-                  <input 
-                    type="text" 
-                    id="keyword-end-time"
-                    class="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
-                    placeholder="End time"
-                    value="End time"
-                  >
-                </div>
-                <div>
-                  <label for="keyword-status" class="block text-xs font-medium text-gray-600 mb-1">
-                    Status/Result will be looked for by:
-                  </label>
-                  <input 
-                    type="text" 
-                    id="keyword-status"
-                    class="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
-                    placeholder="terminating with"
-                    value="terminating with"
-                  >
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Refresh Settings -->
-          <div class="mt-6 pt-4 border-t border-gray-200">
-            <h4 class="text-md font-medium text-gray-700 mb-3">Auto-Refresh Settings</h4>
-            <div class="space-y-3">
-              <label class="flex items-center">
-                <input type="checkbox" id="backup-auto-refresh" class="rounded border-gray-300">
-                <span class="ml-2 text-sm text-gray-700">Auto-refresh backup status</span>
-                <input 
-                  type="number" 
-                  id="backup-refresh-interval"
-                  min="1" 
-                  max="60"
-                  value="5"
-                  class="ml-2 w-16 px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
-                >
-                <span class="ml-1 text-sm text-gray-700">minutes</span>
-              </label>
-              <label class="flex items-center">
-                <input type="checkbox" id="smart-auto-refresh" class="rounded border-gray-300">
-                <span class="ml-2 text-sm text-gray-700">Auto-refresh SMART data</span>
-                <input 
-                  type="number" 
-                  id="smart-refresh-interval"
-                  min="1" 
-                  max="60"
-                  value="10"
-                  class="ml-2 w-16 px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
-                >
-                <span class="ml-1 text-sm text-gray-700">minutes</span>
-              </label>
-            </div>
-          </div>
-
-          <!-- SMART Data Settings -->
-          <div class="mt-6 pt-4 border-t border-gray-200">
-            <h4 class="text-md font-medium text-gray-700 mb-3">SMART Data Configuration</h4>
-            <div class="space-y-3">
-              <div>
-                <label for="smart-log-format" class="block text-sm font-medium text-gray-700 mb-2">
-                  SMART Log Format
-                </label>
-                <select 
-                  id="smart-log-format"
-                  class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="smartctl-json">smartctl JSON output</option>
-                  <option value="smartctl-text">smartctl text output</option>
-                  <option value="custom">Custom format</option>
-                </select>
-              </div>
-              <div>
-                <label for="smart-datetime-format" class="block text-sm font-medium text-gray-700 mb-2">
-                  SMART Data Date/Time Format
-                </label>
-                <input 
-                  type="text" 
-                  id="smart-datetime-format"
-                  class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="%Y-%m-%d %H:%M:%S"
-                  value="%Y-%m-%d %H:%M:%S"
-                >
-              </div>
-              <div class="space-y-2">
-                <label class="flex items-center">
-                  <input type="checkbox" id="smart-temp-monitoring" class="rounded border-gray-300" checked>
-                  <span class="ml-2 text-sm text-gray-700">Monitor drive temperature</span>
-                </label>
-                <label class="flex items-center">
-                  <input type="checkbox" id="smart-health-monitoring" class="rounded border-gray-300" checked>
-                  <span class="ml-2 text-sm text-gray-700">Monitor overall health status</span>
-                </label>
-                <label class="flex items-center">
-                  <input type="checkbox" id="smart-attribute-monitoring" class="rounded border-gray-300" checked>
-                  <span class="ml-2 text-sm text-gray-700">Monitor critical SMART attributes</span>
-                </label>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-
     <div class="bg-white rounded-lg shadow-md p-6 mb-6">
       <h2 class="text-xl font-semibold mb-4">Actions</h2>
       
@@ -423,7 +128,7 @@
           id="complete-setup" 
           class="px-6 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500"
         >
-          Complete Setup & Go to Dashboard
+          Complete Setup & Go to Containers
         </button>
         
         <button 
@@ -442,5 +147,6 @@
       </div>
     </div>
   </div>
+  <script src="/static/nav.js" defer></script>
 </body>
 </html>

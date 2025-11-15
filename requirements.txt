@@ -2,3 +2,4 @@ flask
 docker
 python-dotenv
 gunicorn
+sqlalchemy
