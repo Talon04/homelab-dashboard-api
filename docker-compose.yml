@@ -7,7 +7,5 @@ services:
       - "5000:5000"
     volumes:
       - ./backend:/app/backend
-      - ./frontend:/app/frontend
-      - ./backend/config:/app/backend/config
       - /var/run/docker.sock:/var/run/docker.sock
     restart: unless-stopped

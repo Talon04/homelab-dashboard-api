@@ -18,7 +18,7 @@ except ImportError:
 class SaveManager:
     """Data persistence manager (SQLite only). Config JSON is handled elsewhere."""
 
-    def __init__(self, db_path: str = "backend/data/data.db"):
+    def __init__(self, db_path: str = "data/data.db"):
         # Database setup only
         self.db_manager = None
         if DatabaseManager is not None:

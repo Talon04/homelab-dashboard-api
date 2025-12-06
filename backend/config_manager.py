@@ -4,16 +4,19 @@ import threading
 import time
 from typing import Any, Dict, Optional
 
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
 class ConfigManager:
-    def __init__(self, config_path: str = "backend/data/config.json"):
-        self.config_path = config_path
+    def __init__(self, config_path: Optional[str] = None):
+        # Always store config under backend/data/config.json (absolute path)
+        self.config_path = config_path or os.path.join(BASE_DIR, 'data', 'config.json')
         self._config: Dict[str, Any] = {}
         self._lock = threading.RLock()
         self._last_save = 0
         self._save_delay = 0.5  # 500ms delay for batching saves
         self._pending_save = False
         self.load_config()
-    
+
     def load_config(self) -> None:
         """Load configuration from file"""
         with self._lock:
@@ -28,7 +31,7 @@ class ConfigManager:
                 print(f"Error loading config: {e}")
                 self._config = self._get_default_config()
                 self._save_now()
-    
+
     def _get_default_config(self) -> Dict[str, Any]:
         """Get default configuration"""
         return {
@@ -53,24 +56,24 @@ class ConfigManager:
                 }
             }
         }
-    
+
     def get(self, key: str, default: Any = None) -> Any:
         """Get a configuration value"""
         with self._lock:
             return self._config.get(key, default)
-    
+
     def set(self, key: str, value: Any) -> None:
         """Set a configuration value"""
         with self._lock:
             self._config[key] = value
             self._schedule_save()
-    
+
     def update(self, updates: Dict[str, Any]) -> None:
         """Update multiple configuration values at once"""
         with self._lock:
             self._config.update(updates)
             self._schedule_save()
-    
+
     def get_nested(self, *keys: str, default: Any = None) -> Any:
         """Get a nested configuration value (e.g., get_nested('preferred_ports', 'container_id'))"""
         with self._lock:
@@ -81,15 +84,15 @@ class ConfigManager:
                 else:
                     return default
             return current
-    
+
     def set_nested(self, *keys_and_value) -> None:
         """Set a nested configuration value (e.g., set_nested('preferred_ports', 'container_id', '8080'))"""
         if len(keys_and_value) < 2:
             raise ValueError("Need at least one key and a value")
-        
+
         keys = keys_and_value[:-1]
         value = keys_and_value[-1]
-        
+
         with self._lock:
             current = self._config
             for key in keys[:-1]:
@@ -98,7 +101,7 @@ class ConfigManager:
                 current = current[key]
             current[keys[-1]] = value
             self._schedule_save()
-    
+
     def delete_nested(self, *keys: str) -> bool:
         """Delete a nested configuration value"""
         with self._lock:
@@ -108,7 +111,7 @@ class ConfigManager:
                     current = current[key]
                 else:
                     return False
-            
+
             if isinstance(current, dict) and keys[-1] in current:
                 del current[keys[-1]]
                 self._schedule_save()
