@@ -1,11 +1,10 @@
 import os
 from typing import Dict, Any, List, Optional
+from paths import BASE_DIR
 
-CODE_ROOT = os.path.join(os.path.dirname(__file__), 'data', 'user_code')
+CODE_ROOT = os.path.join(BASE_DIR, 'data', 'user_code')
 
 ALLOWED_BASE = CODE_ROOT
-
-os.makedirs(CODE_ROOT, exist_ok=True)
 
 def _safe_path(rel_path: str) -> str:
     rel_path = rel_path or ''

@@ -3,13 +3,11 @@ import sys
 from flask import Flask, render_template, jsonify, request
 from werkzeug.middleware.proxy_fix import ProxyFix
 
-# Add the current directory to Python path
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-
 import config_utils
 import docker_utils
 import code_editor_utils
 from save_manager import get_save_manager
+
 
 app = Flask(__name__, template_folder='../frontend/templates', static_folder='../frontend/static')
 
@@ -17,6 +15,7 @@ app = Flask(__name__, template_folder='../frontend/templates', static_folder='..
 proxy_count = config_utils.get_proxy_count()
 if proxy_count > 0:
     app.wsgi_app = ProxyFix(app.wsgi_app, x_for=proxy_count, x_proto=proxy_count, x_host=proxy_count, x_prefix=proxy_count)
+
 
 @app.route("/")
 def index():

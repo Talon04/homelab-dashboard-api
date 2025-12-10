@@ -3,12 +3,10 @@ import os
 import threading
 import time
 from typing import Any, Dict, Optional
-
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+from paths import BASE_DIR
 
 class ConfigManager:
     def __init__(self, config_path: Optional[str] = None):
-        # Always store config under backend/data/config.json (absolute path)
         self.config_path = config_path or os.path.join(BASE_DIR, 'data', 'config.json')
         self._config: Dict[str, Any] = {}
         self._lock = threading.RLock()
