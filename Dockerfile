@@ -15,4 +15,6 @@ ENV PYTHONPATH=/app/backend
 
 EXPOSE 5000
 
-CMD ["gunicorn","-w","4","-b","0.0.0.0:5000","app:app"]
+# Use a single worker to avoid multi-process config races that can
+# cause settings to be overwritten/reset at runtime.
+CMD ["gunicorn","-w","1","-b","0.0.0.0:5000","app:app"]

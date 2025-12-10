@@ -6,6 +6,7 @@ services:
     ports:
       - "5000:5000"
     volumes:
-      - ./backend:/app/backend
+      # Persist config/data directory so settings aren't reset on redeploy
+      - ./data:/app/data
       - /var/run/docker.sock:/var/run/docker.sock
     restart: unless-stopped
