@@ -1,6 +1,6 @@
 import os
 import docker
-dontUseDocker = os.environ.get("DONT_USE_DOCKER", "false").lower() == "true"
+dontUseDocker = "true"
 print(dontUseDocker)
 def list_containers():
     if dontUseDocker:

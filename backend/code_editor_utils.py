@@ -1,47 +1,51 @@
 import os
 from typing import Dict, Any, List, Optional
-from paths import BASE_DIR
+from paths import CODE_DIR
 
-CODE_ROOT = os.path.join(BASE_DIR, 'data', 'user_code')
+# Normalize base directory to match normalized joined paths in _safe_path
+ALLOWED_BASE = os.path.normpath(CODE_DIR)
 
-ALLOWED_BASE = CODE_ROOT
 
 def _safe_path(rel_path: str) -> str:
-    rel_path = rel_path or ''
-    joined = os.path.normpath(os.path.join(CODE_ROOT, rel_path))
+    rel_path = rel_path or ""
+    joined = os.path.normpath(os.path.join(CODE_DIR, rel_path))
     if not joined.startswith(ALLOWED_BASE):
-        raise ValueError('Invalid path')
+        raise ValueError("Invalid path")
     return joined
 
-def list_tree(rel_path: str = '') -> Dict[str, Any]:
+
+def list_tree(rel_path: str = "") -> Dict[str, Any]:
     base = _safe_path(rel_path)
-    tree = { 'path': rel_path or '', 'dirs': [], 'files': [] }
+    tree = {"path": rel_path or "", "dirs": [], "files": []}
     try:
         for name in sorted(os.listdir(base)):
             full = os.path.join(base, name)
-            rel = os.path.relpath(full, CODE_ROOT)
+            rel = os.path.relpath(full, CODE_DIR)
             if os.path.isdir(full):
-                tree['dirs'].append({ 'name': name, 'path': rel })
+                tree["dirs"].append({"name": name, "path": rel})
             else:
-                tree['files'].append({ 'name': name, 'path': rel })
+                tree["files"].append({"name": name, "path": rel})
     except FileNotFoundError:
         pass
     return tree
 
+
 def read_file(rel_path: str) -> Dict[str, Any]:
     full = _safe_path(rel_path)
     if not os.path.exists(full) or not os.path.isfile(full):
-        raise FileNotFoundError('File not found')
-    with open(full, 'r', encoding='utf-8', errors='ignore') as f:
+        raise FileNotFoundError("File not found")
+    with open(full, "r", encoding="utf-8", errors="ignore") as f:
         content = f.read()
-    return { 'path': rel_path, 'content': content }
+    return {"path": rel_path, "content": content}
+
 
 def write_file(rel_path: str, content: str) -> Dict[str, Any]:
     full = _safe_path(rel_path)
     os.makedirs(os.path.dirname(full), exist_ok=True)
-    with open(full, 'w', encoding='utf-8') as f:
-        f.write(content or '')
-    return { 'path': rel_path, 'ok': True }
+    with open(full, "w", encoding="utf-8") as f:
+        f.write(content or "")
+    return {"path": rel_path, "ok": True}
+
 
 def delete_path(rel_path: str) -> Dict[str, Any]:
     full = _safe_path(rel_path)
@@ -50,30 +54,31 @@ def delete_path(rel_path: str) -> Dict[str, Any]:
         try:
             os.rmdir(full)
         except OSError:
-            return { 'path': rel_path, 'ok': False, 'error': 'Directory not empty' }
-        return { 'path': rel_path, 'ok': True }
+            return {"path": rel_path, "ok": False, "error": "Directory not empty"}
+        return {"path": rel_path, "ok": True}
     if os.path.exists(full):
         os.remove(full)
-        return { 'path': rel_path, 'ok': True }
-    return { 'path': rel_path, 'ok': False, 'error': 'Path not found' }
+        return {"path": rel_path, "ok": True}
+    return {"path": rel_path, "ok": False, "error": "Path not found"}
+
 
 def ensure_scaffold(rel_path: str, widget_type: Optional[str] = None) -> Dict[str, Any]:
     full = _safe_path(rel_path)
     if os.path.exists(full):
-        return { 'path': rel_path, 'ok': True, 'created': False }
+        return {"path": rel_path, "ok": True, "created": False}
     os.makedirs(os.path.dirname(full), exist_ok=True)
-    content = ''
+    content = ""
     # Provide sensible defaults depending on extension
-    if rel_path.endswith('.py'):
+    if rel_path.endswith(".py"):
         content = (
             "#!/usr/bin/env python3\n"
-            "\"\"\"Widget script for container interaction.\n"
+            '"""Widget script for container interaction.\n'
             "\n"
             "Context is passed as first argument (JSON string).\n"
             "The context contains:\n"
             "  - container: Docker container info (id, name, status, ports, labels, etc.)\n"
             "  - widget: Widget configuration (id, type, label, etc.)\n"
-            "\"\"\"\n"
+            '"""\n'
             "import sys\n"
             "import json\n"
             "\n"
@@ -99,7 +104,7 @@ def ensure_scaffold(rel_path: str, widget_type: Optional[str] = None) -> Dict[st
             "#         result = cont.exec_run('df -h')\n"
             "#         print(result.output.decode('utf-8'))\n"
             "#     except Exception as e:\n"
-            "#         print(f\"Error: {e}\")\n"
+            '#         print(f"Error: {e}")\n'
             "\n"
             "# Example: Get container stats\n"
             "# import docker\n"
@@ -112,13 +117,13 @@ def ensure_scaffold(rel_path: str, widget_type: Optional[str] = None) -> Dict[st
             "#         # Process stats here\n"
             "#         print(json.dumps(stats, indent=2))\n"
             "#     except Exception as e:\n"
-            "#         print(f\"Error: {e}\")\n"
+            '#         print(f"Error: {e}")\n'
             "\n"
             "# For text widgets: print output to stdout\n"
             "# The output will be captured and displayed in the widget\n"
-            "print(\"Widget executed successfully!\")\n"
+            'print("Widget executed successfully!")\n'
         )
-    elif rel_path.endswith('.js'):
+    elif rel_path.endswith(".js"):
         content = (
             "// Widget script template\n"
             "// This will be executed in browser via new Function('context','api', code)\n"
@@ -129,6 +134,6 @@ def ensure_scaffold(rel_path: str, widget_type: Optional[str] = None) -> Dict[st
             "  // For text widgets, you can call api.setText('New text');\n"
             "})(context, api);\n"
         )
-    with open(full, 'w', encoding='utf-8') as f:
+    with open(full, "w", encoding="utf-8") as f:
         f.write(content)
-    return { 'path': rel_path, 'ok': True, 'created': True }
+    return {"path": rel_path, "ok": True, "created": True}
