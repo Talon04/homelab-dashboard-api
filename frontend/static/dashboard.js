@@ -9,17 +9,17 @@ window.addEventListener("DOMContentLoaded", async () => {
       fetch("/api/config/internal_ip"),
       fetch("/api/config/external_ip")
     ]);
-    
+
     if (internalRes.ok) {
       const internalData = await internalRes.json();
       IP_FOR_INTERNAL_LINKS = internalData.internal_ip;
     }
-    
+
     if (externalRes.ok) {
       const externalData = await externalRes.json();
       IP_FOR_EXPOSED_LINKS = externalData.external_ip;
     }
-    
+
     console.log(`Loaded IP config: Internal=${IP_FOR_INTERNAL_LINKS}, External=${IP_FOR_EXPOSED_LINKS}`);
   } catch (err) {
     console.warn("Failed to load IP config, using defaults:", err);
@@ -40,59 +40,59 @@ window.addEventListener("DOMContentLoaded", async () => {
   });
 
   // Render each compose project with its  containers (icons) 
-window.renderComposeList = async function() {
-  const containerList = document.getElementById("container-list");
-  containerList.innerHTML = "";
-  for (const [composeName, containers] of Object.entries(composeMap)) {
-    // Compose line
-    const composeLine = document.createElement("div");
-    composeLine.className = "flex items-center justify-between bg-gray-100 rounded p-3 mb-2 shadow";
-    
-    // Compose name 
-    const left = document.createElement("div");
-    left.className = "flex items-center gap-4";
-    const nameSpan = document.createElement("span");
-    nameSpan.className = "font-semibold text-lg";
-    nameSpan.textContent = composeName;
-    left.appendChild(nameSpan);
-    
-    // Container Images
-    containers.forEach(c => {
-      const imgSpan = document.createElement("span");
-      imgSpan.className = "ml-2 px-2 py-1 bg-blue-200 rounded text-xs";
-      imgSpan.textContent = c.image || c.name;
-      left.appendChild(imgSpan);
-    });
-    composeLine.appendChild(left);
+  window.renderComposeList = async function () {
+    const containerList = document.getElementById("container-list");
+    containerList.innerHTML = "";
+    for (const [composeName, containers] of Object.entries(composeMap)) {
+      // Compose line
+      const composeLine = document.createElement("div");
+      composeLine.className = "flex items-center justify-between bg-gray-100 rounded p-3 mb-2 shadow";
 
-    // Expand Toggle button
-    const toggleBtn = document.createElement("button");
-    toggleBtn.className = "ml-4 px-2 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 focus:outline-none";
-    toggleBtn.textContent = expandedCompose === composeName ? "▲" : "▼";
-    toggleBtn.title = expandedCompose === composeName ? "Collapse" : "Expand";
-    toggleBtn.onclick = async () => {
-      expandedCompose = expandedCompose === composeName ? null : composeName;
-      await window.renderComposeList();
-    };
-    composeLine.appendChild(toggleBtn);
+      // Compose name 
+      const left = document.createElement("div");
+      left.className = "flex items-center gap-4";
+      const nameSpan = document.createElement("span");
+      nameSpan.className = "font-semibold text-lg";
+      nameSpan.textContent = composeName;
+      left.appendChild(nameSpan);
 
-    containerList.appendChild(composeLine);
+      // Container Images
+      containers.forEach(c => {
+        const imgSpan = document.createElement("span");
+        imgSpan.className = "ml-2 px-2 py-1 bg-blue-200 rounded text-xs";
+        imgSpan.textContent = c.image || c.name;
+        left.appendChild(imgSpan);
+      });
+      composeLine.appendChild(left);
 
-    // Expanded details - AWAIT the async rendering
-    if (expandedCompose === composeName) {
-      const detailsDiv = document.createElement("div");
-      detailsDiv.className = "mb-6 pl-8";
-      
-      // Use for...of to properly await each container
-      for (const container of containers) {
-        await renderContainerDetails(container, detailsDiv);
+      // Expand Toggle button
+      const toggleBtn = document.createElement("button");
+      toggleBtn.className = "ml-4 px-2 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 focus:outline-none";
+      toggleBtn.textContent = expandedCompose === composeName ? "▲" : "▼";
+      toggleBtn.title = expandedCompose === composeName ? "Collapse" : "Expand";
+      toggleBtn.onclick = async () => {
+        expandedCompose = expandedCompose === composeName ? null : composeName;
+        await window.renderComposeList();
+      };
+      composeLine.appendChild(toggleBtn);
+
+      containerList.appendChild(composeLine);
+
+      // Expanded details - AWAIT the async rendering
+      if (expandedCompose === composeName) {
+        const detailsDiv = document.createElement("div");
+        detailsDiv.className = "mb-6 pl-8";
+
+        // Use for...of to properly await each container
+        for (const container of containers) {
+          await renderContainerDetails(container, detailsDiv);
+        }
+
+        containerList.appendChild(detailsDiv);
       }
-      
-      containerList.appendChild(detailsDiv);
     }
   }
-}
-await window.renderComposeList();
+  await window.renderComposeList();
 
 
   async function renderContainerDetails(container, parentDiv) {
@@ -106,7 +106,7 @@ await window.renderComposeList();
     try {
       const portRes = await fetch(`/api/data/containers/ports/${container.id}`);
       const portData = await portRes.json();
-      
+
       if (portData.length > 0) {
         // Create ports list with clickable items
         portText = "<div class='flex flex-wrap gap-1 mt-1'>";
@@ -114,7 +114,7 @@ await window.renderComposeList();
           hostPorts.push(port.host_port);
           containerPorts.push(port.container_port);
           hostIp = port.host_ip;
-          
+
           // Create clickable port badge
           portText += `<span class="port-badge px-2 py-1 bg-gray-100 hover:bg-blue-100 rounded text-xs cursor-pointer" 
                           data-port="${port.host_port}" 
@@ -125,7 +125,7 @@ await window.renderComposeList();
                        </span>`;
         });
         portText += "</div>";
-      }else {
+      } else {
         console.warn(`No ports found for container ${container.name}`);
       }
     } catch (err) {
@@ -143,7 +143,7 @@ await window.renderComposeList();
     } catch (err) {
       console.info(`Failed to fetch preferredPort for ${container.id}`, err);
     }
-        
+
     // Check if container is exposed
     let isExposed = false;
     try {
@@ -157,13 +157,13 @@ await window.renderComposeList();
     // Check for custom link bodies (internal and external separately)
     let customInternalLinkBody = null;
     let customExternalLinkBody = null;
-    
+
     try {
       const internalLinkRes = await fetch(`/api/data/link_bodies/${container.id}`);
       const internalLinkData = await internalLinkRes.json();
-      
+
       console.log(`DEBUG: Internal link data for ${container.id}:`, internalLinkData, typeof internalLinkData);
-      
+
       if (typeof internalLinkData === 'string' && internalLinkData.trim() !== "") {
         customInternalLinkBody = internalLinkData;
         console.log(`DEBUG: Using custom internal link: ${customInternalLinkBody}`);
@@ -171,13 +171,13 @@ await window.renderComposeList();
     } catch (err) {
       console.info("No custom internal link body found for", container.id, err);
     }
-    
+
     try {
       const externalLinkRes = await fetch(`/api/data/external_link_bodies/${container.id}`);
       const externalLinkData = await externalLinkRes.json();
-      
+
       console.log(`DEBUG: External link data for ${container.id}:`, externalLinkData, typeof externalLinkData);
-      
+
       if (typeof externalLinkData === 'string' && externalLinkData.trim() !== "") {
         customExternalLinkBody = externalLinkData;
         console.log(`DEBUG: Using custom external link: ${customExternalLinkBody}`);
@@ -253,25 +253,41 @@ await window.renderComposeList();
     });
     div.querySelector('[data-add-text]').addEventListener('click', async () => {
       const label = prompt('Text label (for identification)?', 'Text');
-      const text = prompt('Initial text?','');
+      const text = prompt('Initial text?', '');
       const intervalStr = prompt('Auto-refresh interval in seconds (leave empty for no auto-refresh):', '');
       const interval = intervalStr && !isNaN(parseInt(intervalStr)) ? parseInt(intervalStr) : null;
-      const file = `widgets/${container.id}/text_${Date.now()}.py`;  // Changed to .py
-      await fetch('/api/containers/'+encodeURIComponent(container.id)+'/widgets', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ type:'text', size:'md', label: label||'Text', text: text||'', file_path: file, update_interval: interval })});
+      await fetch('/api/containers/' + encodeURIComponent(container.id) + '/widgets', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: 'text',
+          size: 'md',
+          label: label || 'Text',
+          text: text || '',
+          update_interval: interval
+        })
+      });
       await renderWidgets();
       // Open editor if Ctrl pressed during add
     });
     div.querySelector('[data-add-button]').addEventListener('click', async () => {
-      const label = prompt('Button label?','Action');
-      const file = `widgets/${container.id}/button_${Date.now()}.py`;  // Changed to .py
-      await fetch('/api/containers/'+encodeURIComponent(container.id)+'/widgets', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ type:'button', size:'md', label: label||'Action', file_path: file })});
+      const label = prompt('Button label?', 'Action');
+      await fetch('/api/containers/' + encodeURIComponent(container.id) + '/widgets', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: 'button',
+          size: 'md',
+          label: label || 'Action'
+        })
+      });
       await renderWidgets();
     });
 
-    async function renderWidgets(){
+    async function renderWidgets() {
       widgetsEl.innerHTML = '';
-      try{
-        const res = await fetch('/api/containers/'+encodeURIComponent(container.id)+'/widgets');
+      try {
+        const res = await fetch('/api/containers/' + encodeURIComponent(container.id) + '/widgets');
         const widgets = res.ok ? await res.json() : [];
         widgets.forEach(w => {
           const card = document.createElement('div');
@@ -284,88 +300,100 @@ await window.renderComposeList();
           title.textContent = `${w.type === 'button' ? 'Button' : 'Text'}: ${w.label || ''}${intervalText}`;
           const actions = document.createElement('div');
           actions.className = 'flex items-center gap-2';
+          const changeScript = document.createElement('button');
+          changeScript.className = 'text-xs text-blue-600 hover:underline';
+          changeScript.textContent = 'Script';
+          changeScript.addEventListener('click', async () => {
+            const current = w.file_path || '';
+            const nextPath = prompt('Enter script path (relative to user_code, e.g. widgets/..../script.py):', current);
+            if (nextPath === null) return;
+            try {
+              await fetch('/api/containers/' + encodeURIComponent(container.id) + '/widgets/' + w.id, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ file_path: nextPath || null })
+              });
+              await renderWidgets();
+            } catch (e) {
+              console.warn('Failed to update widget script path', e);
+            }
+          });
           const del = document.createElement('button');
           del.className = 'text-xs text-red-600 hover:underline';
           del.textContent = 'Delete';
           del.addEventListener('click', async () => {
             if (!confirm('Delete widget?')) return;
-            await fetch('/api/containers/'+encodeURIComponent(container.id)+'/widgets/'+w.id, {method:'DELETE'});
+            await fetch('/api/containers/' + encodeURIComponent(container.id) + '/widgets/' + w.id, { method: 'DELETE' });
             await renderWidgets();
           });
+          actions.appendChild(changeScript);
           actions.appendChild(del);
           header.appendChild(title);
           header.appendChild(actions);
           card.appendChild(header);
 
           const body = document.createElement('div');
-          if (w.type === 'text'){
+          if (w.type === 'text') {
             const p = document.createElement('div');
             p.className = 'text-sm';
             p.textContent = w.text || '';
             p.title = 'Ctrl-Click to open script';
             p.addEventListener('click', (ev) => {
-              if (ev.ctrlKey && w.file_path){
-                window.open('/code?path='+encodeURIComponent(w.file_path), '_blank');
+              if (ev.ctrlKey && w.file_path) {
+                window.open('/code?path=' + encodeURIComponent(w.file_path), '_blank');
               }
             });
             body.appendChild(p);
-            
-            // Auto-refresh for text widgets with update_interval
+
+            // Auto-refresh display for text widgets with update_interval.
+            // The actual script execution now happens entirely on the server
+            // via backend/task_scheduler.py; here we only poll for updated text.
             if (w.update_interval && w.update_interval > 0) {
               const refreshWidget = async () => {
                 try {
-                  // Execute the Python script
-                  const resp = await fetch('/api/containers/'+encodeURIComponent(container.id)+'/widgets/'+w.id+'/run', {method:'POST'});
-                  const data = await resp.json();
-                  if (resp.ok && data.stdout) {
-                    // Update widget text with script output
-                    await fetch('/api/containers/'+encodeURIComponent(container.id)+'/widgets/'+w.id, {
-                      method:'PUT', 
-                      headers:{'Content-Type':'application/json'}, 
-                      body: JSON.stringify({ text: data.stdout.trim() })
-                    });
-                    // Update display
-                    p.textContent = data.stdout.trim();
+                  const resp = await fetch('/api/containers/' + encodeURIComponent(container.id) + '/widgets');
+                  const updatedWidgets = resp.ok ? await resp.json() : [];
+                  const updated = updatedWidgets.find(x => x.id === w.id);
+                  if (updated && typeof updated.text === 'string') {
+                    p.textContent = updated.text;
                   }
-                } catch(e) { 
-                  console.warn('Auto-refresh failed for widget', w.id, e); 
+                } catch (e) {
+                  console.warn('Auto-refresh (poll) failed for widget', w.id, e);
                 }
               };
-              // Initial execution
+              // Initial fetch to ensure we show the latest server-side value
               refreshWidget();
-              // Set up interval
               const intervalId = setInterval(refreshWidget, w.update_interval * 1000);
-              // Store interval ID so we can clear it later if needed
               card.dataset.intervalId = intervalId;
             }
-          } else if (w.type === 'button'){
+          } else if (w.type === 'button') {
             const btn = document.createElement('button');
             btn.className = 'px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600';
             btn.textContent = w.label || 'Run';
             btn.title = 'Click to run. Ctrl-Click opens script.';
             btn.addEventListener('click', async (ev) => {
-              if (ev.ctrlKey && w.file_path){
-                window.open('/code?path='+encodeURIComponent(w.file_path), '_blank');
+              if (ev.ctrlKey && w.file_path) {
+                window.open('/code?path=' + encodeURIComponent(w.file_path), '_blank');
                 return;
               }
               // Run server-side Python by default
-              if ((w.file_path||'').endsWith('.py') || !w.file_path){
+              if ((w.file_path || '').endsWith('.py') || !w.file_path) {
                 try {
-                  const resp = await fetch('/api/containers/'+encodeURIComponent(container.id)+'/widgets/'+w.id+'/run', {method:'POST'});
+                  const resp = await fetch('/api/containers/' + encodeURIComponent(container.id) + '/widgets/' + w.id + '/run', { method: 'POST' });
                   const data = await resp.json();
                   if (!resp.ok) throw new Error(data.error || 'Run failed');
                   window.toastManager.info('Python script executed');
-                } catch(e){ window.toastManager.error(e.message); }
-              } else if ((w.file_path||'').endsWith('.js')) {
+                } catch (e) { window.toastManager.error(e.message); }
+              } else if ((w.file_path || '').endsWith('.js')) {
                 try {
-                  const file = await (await fetch('/api/code/file?path='+encodeURIComponent(w.file_path))).json();
+                  const file = await (await fetch('/api/code/file?path=' + encodeURIComponent(w.file_path))).json();
                   const code = file.content || '';
                   const containersList = await (await fetch('/api/data/containers')).json();
                   const ctxContainer = containersList.find(c => c.id === container.id) || null;
                   const context = { container: ctxContainer, widget: w };
-                  const api = { setText: async (val) => { await fetch('/api/containers/'+encodeURIComponent(container.id)+'/widgets/'+w.id, {method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ text: String(val||'') })}); await renderWidgets(); } };
-                  new Function('context','api', code)(context, api);
-                } catch(e){ window.toastManager.error(e.message); }
+                  const api = { setText: async (val) => { await fetch('/api/containers/' + encodeURIComponent(container.id) + '/widgets/' + w.id, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: String(val || '') }) }); await renderWidgets(); } };
+                  new Function('context', 'api', code)(context, api);
+                } catch (e) { window.toastManager.error(e.message); }
               } else {
                 window.toastManager.info('No script associated');
               }
@@ -375,7 +403,7 @@ await window.renderComposeList();
           card.appendChild(body);
           widgetsEl.appendChild(card);
         });
-      }catch(e){ console.warn('Widgets load failed', e); }
+      } catch (e) { console.warn('Widgets load failed', e); }
     }
     // Load widgets initially (not only in edit mode so users see them)
     await renderWidgets();
@@ -386,7 +414,7 @@ await window.renderComposeList();
 });
 
 // Helpers 
-window.setPreferredPort = async function(containerId, port) {
+window.setPreferredPort = async function (containerId, port) {
   try {
     const res = await fetch("/api/data/preferred_ports", {
       method: "POST",
@@ -396,17 +424,17 @@ window.setPreferredPort = async function(containerId, port) {
         port: port
       })
     });
-    
+
     if (!res.ok) {
       const errorData = await res.json().catch(() => ({}));
       throw new Error(errorData.error || "Failed to update preferred port");
     }
-    
+
     // Store current expanded state and refresh
     const currentExpanded = expandedCompose;
     expandedCompose = currentExpanded;
     await window.renderComposeList();
-    
+
     window.toastManager.success(`Preferred port set to ${port}`);
   } catch (err) {
     console.error("Error setting preferred port:", err);
@@ -414,7 +442,7 @@ window.setPreferredPort = async function(containerId, port) {
   }
 };
 
-window.toggleExposed = async function(containerId, exposed) {
+window.toggleExposed = async function (containerId, exposed) {
   try {
     const res = await fetch("/api/data/exposed_containers", {
       method: "POST",
@@ -424,17 +452,17 @@ window.toggleExposed = async function(containerId, exposed) {
         exposed: exposed
       })
     });
-    
+
     if (!res.ok) {
       const errorData = await res.json().catch(() => ({}));
       throw new Error(errorData.error || "Failed to update exposed status");
     }
-    
+
     // Store current expanded state and refresh
     const currentExpanded = expandedCompose;
     expandedCompose = currentExpanded;
     await window.renderComposeList();
-    
+
     window.toastManager.success(`Container ${exposed ? 'exposed' : 'hidden'}`);
   } catch (err) {
     console.error("Error toggling exposed status:", err);
@@ -442,22 +470,22 @@ window.toggleExposed = async function(containerId, exposed) {
   }
 };
 
-window.editLink = async function(containerId, linkType) {
+window.editLink = async function (containerId, linkType) {
   try {
     // Get current custom link body based on type
     let currentUrl = "";
     let hasCustomLink = false;
-    
-    const apiEndpoint = linkType === 'internal' 
+
+    const apiEndpoint = linkType === 'internal'
       ? `/api/data/link_bodies/${containerId}`
       : `/api/data/external_link_bodies/${containerId}`;
-    
+
     try {
       const linkRes = await fetch(apiEndpoint);
       const linkData = await linkRes.json();
-      
+
       console.log(`DEBUG: Edit ${linkType} link data for ${containerId}:`, linkData, typeof linkData);
-      
+
       if (typeof linkData === 'string' && linkData.trim() !== "") {
         currentUrl = linkData;
         hasCustomLink = true;
@@ -466,7 +494,7 @@ window.editLink = async function(containerId, linkType) {
     } catch (err) {
       console.info(`No existing custom ${linkType} link found`);
     }
-    
+
     // If no custom link, use default format
     if (!currentUrl) {
       // Get preferred port for default URL
@@ -474,21 +502,21 @@ window.editLink = async function(containerId, linkType) {
         const portRes = await fetch(`/api/data/preferred_ports/${containerId}`);
         const portData = await portRes.json();
         const port = portData.preferred_port;
-        currentUrl = linkType === 'internal' 
+        currentUrl = linkType === 'internal'
           ? `http://${IP_FOR_INTERNAL_LINKS}:${port}`
           : `http://${IP_FOR_EXPOSED_LINKS}:${port}`;
       } catch (err) {
-        currentUrl = linkType === 'internal' 
+        currentUrl = linkType === 'internal'
           ? `http://${IP_FOR_INTERNAL_LINKS}:8080`
           : `http://${IP_FOR_EXPOSED_LINKS}:8080`;
       }
     }
-    
+
     const title = hasCustomLink ? 'Edit Custom Link' : 'Set Custom Link';
-    const message = hasCustomLink 
+    const message = hasCustomLink
       ? `Editing custom ${linkType} link. Leave empty to reset to default.`
       : `Enter a custom ${linkType} link for this container.`;
-    
+
     window.modalManager.prompt(
       title,
       message,
@@ -512,7 +540,7 @@ window.editLink = async function(containerId, linkType) {
         confirmText: 'Save Link'
       }
     );
-    
+
   } catch (err) {
     console.error("Error editing link:", err);
     window.toastManager.error('Failed to edit link: ' + err.message);
@@ -526,11 +554,11 @@ async function setCustomLink(containerId, customUrl, linkType) {
     if (normalizedUrl && !normalizedUrl.startsWith('http://') && !normalizedUrl.startsWith('https://')) {
       normalizedUrl = 'http://' + normalizedUrl;
     }
-    
-    const apiEndpoint = linkType === 'internal' 
+
+    const apiEndpoint = linkType === 'internal'
       ? "/api/data/link_bodies"
       : "/api/data/external_link_bodies";
-    
+
     const res = await fetch(apiEndpoint, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -539,12 +567,12 @@ async function setCustomLink(containerId, customUrl, linkType) {
         link_body: normalizedUrl
       })
     });
-    
+
     if (!res.ok) {
       const errorData = await res.json().catch(() => ({}));
       throw new Error(errorData.error || `Failed to update custom ${linkType} link`);
     }
-    
+
     // Store current expanded state and refresh
     const currentExpanded = expandedCompose;
     expandedCompose = currentExpanded;
@@ -558,10 +586,10 @@ async function setCustomLink(containerId, customUrl, linkType) {
 
 async function clearCustomLink(containerId, linkType) {
   try {
-    const apiEndpoint = linkType === 'internal' 
+    const apiEndpoint = linkType === 'internal'
       ? "/api/data/link_bodies"
       : "/api/data/external_link_bodies";
-    
+
     const res = await fetch(apiEndpoint, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -570,12 +598,12 @@ async function clearCustomLink(containerId, linkType) {
         link_body: "" // Send empty string to clear
       })
     });
-    
+
     if (!res.ok) {
       const errorData = await res.json().catch(() => ({}));
       throw new Error(errorData.error || `Failed to clear custom ${linkType} link`);
     }
-    
+
     // Store current expanded state and refresh
     const currentExpanded = expandedCompose;
     expandedCompose = currentExpanded;
