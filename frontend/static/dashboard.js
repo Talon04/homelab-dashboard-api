@@ -2,12 +2,15 @@ let IP_FOR_INTERNAL_LINKS = "127.0.0.1";
 let IP_FOR_EXPOSED_LINKS = "127.0.0.1";
 let expandedCompose = null;
 let composeMap = {};
+let MONITOR_MODULE_ENABLED = false;
+let CODE_MODULE_ENABLED = false;
 window.addEventListener("DOMContentLoaded", async () => {
   // Load IP config first from separate endpoints
   try {
-    const [internalRes, externalRes] = await Promise.all([
+    const [internalRes, externalRes, modulesRes] = await Promise.all([
       fetch("/api/config/internal_ip"),
-      fetch("/api/config/external_ip")
+      fetch("/api/config/external_ip"),
+      fetch("/api/config/modules")
     ]);
 
     if (internalRes.ok) {
@@ -18,6 +21,13 @@ window.addEventListener("DOMContentLoaded", async () => {
     if (externalRes.ok) {
       const externalData = await externalRes.json();
       IP_FOR_EXPOSED_LINKS = externalData.external_ip;
+    }
+
+    if (modulesRes && modulesRes.ok) {
+      const modulesData = await modulesRes.json();
+      const mods = Array.isArray(modulesData.modules) ? modulesData.modules : [];
+      MONITOR_MODULE_ENABLED = mods.includes('monitor');
+      CODE_MODULE_ENABLED = mods.includes('code_editor');
     }
 
     console.log(`Loaded IP config: Internal=${IP_FOR_INTERNAL_LINKS}, External=${IP_FOR_EXPOSED_LINKS}`);
@@ -154,6 +164,20 @@ window.addEventListener("DOMContentLoaded", async () => {
       console.warn("Error getting exposed containers:", err);
     }
 
+    // Check monitor state for this container (only if monitor module enabled)
+    let isMonitored = false;
+    if (MONITOR_MODULE_ENABLED) {
+      try {
+        const monRes = await fetch(`/api/monitor/container/${container.id}`);
+        if (monRes.ok) {
+          const monData = await monRes.json();
+          isMonitored = !!monData.enabled;
+        }
+      } catch (err) {
+        console.warn("Error getting monitor state for", container.id, err);
+      }
+    }
+
     // Check for custom link bodies (internal and external separately)
     let customInternalLinkBody = null;
     let customExternalLinkBody = null;
@@ -206,6 +230,18 @@ window.addEventListener("DOMContentLoaded", async () => {
     const div = document.createElement("div");
     div.className = "bg-white p-4 rounded-lg shadow-md mb-2";
 
+    const monitorToggleBtn = MONITOR_MODULE_ENABLED
+      ? `<button class="text-xs px-2 py-1 rounded ${isMonitored ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-700'}" title="Toggle monitoring" onclick="toggleMonitor('${container.id}', ${!isMonitored})">
+           ${isMonitored ? 'Monitoring' : 'Monitor'}
+         </button>`
+      : '';
+
+    const WidgetEditBtn = CODE_MODULE_ENABLED
+      ? `<button class="text-xs px-2 py-1 bg-gray-100 hover:bg-gray-200 rounded" title="Widget edit mode" data-widget-toggle>
+            Widgets
+          </button>`
+      : '';
+
     // Create exposed toggle button (inline next to status)
     const exposedToggleBtn = `<button 
       class="ml-2 px-2 py-1 text-xs rounded ${isExposed ? 'bg-green-500 text-white' : 'bg-gray-300'}" 
@@ -213,15 +249,15 @@ window.addEventListener("DOMContentLoaded", async () => {
       ${isExposed ? 'Exposed' : 'Not Exposed'}
     </button>`;
 
+
     div.innerHTML = `
       <div class="flex items-center justify-between">
         <div>
           <strong>${container.name}</strong> - ${container.status} ${exposedToggleBtn}
         </div>
         <div class="flex items-center gap-2">
-          <button class="text-xs px-2 py-1 bg-gray-100 hover:bg-gray-200 rounded" title="Widget edit mode" data-widget-toggle>
-            <> Code
-          </button>
+          ${monitorToggleBtn}
+          ${WidgetEditBtn}
         </div>
       </div>
       <div class="mb-1">Image: <span class='font-mono text-xs'>${container.image || "-"}</span></div>
@@ -245,44 +281,51 @@ window.addEventListener("DOMContentLoaded", async () => {
     const toolbar = div.querySelector('[data-widget-toolbar]');
     const toggle = div.querySelector('[data-widget-toggle]');
     const widgetsEl = div.querySelector('[data-widgets]');
-    let editMode = false;
-    toggle.addEventListener('click', async () => {
-      editMode = !editMode;
-      if (editMode) { toolbar.classList.remove('hidden'); await renderWidgets(); }
-      else { toolbar.classList.add('hidden'); await renderWidgets(); }
-    });
-    div.querySelector('[data-add-text]').addEventListener('click', async () => {
-      const label = prompt('Text label (for identification)?', 'Text');
-      const text = prompt('Initial text?', '');
-      const intervalStr = prompt('Auto-refresh interval in seconds (leave empty for no auto-refresh):', '');
-      const interval = intervalStr && !isNaN(parseInt(intervalStr)) ? parseInt(intervalStr) : null;
-      await fetch('/api/containers/' + encodeURIComponent(container.id) + '/widgets', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          type: 'text',
-          size: 'md',
-          label: label || 'Text',
-          text: text || '',
-          update_interval: interval
-        })
+    const addTextBtn = div.querySelector('[data-add-text]');
+    const addButtonBtn = div.querySelector('[data-add-button]');
+
+    if (CODE_MODULE_ENABLED && toggle && toolbar && addTextBtn && addButtonBtn) {
+      let editMode = false;
+      toggle.addEventListener('click', async () => {
+        editMode = !editMode;
+        if (editMode) { toolbar.classList.remove('hidden'); await renderWidgets(); }
+        else { toolbar.classList.add('hidden'); await renderWidgets(); }
       });
-      await renderWidgets();
-      // Open editor if Ctrl pressed during add
-    });
-    div.querySelector('[data-add-button]').addEventListener('click', async () => {
-      const label = prompt('Button label?', 'Action');
-      await fetch('/api/containers/' + encodeURIComponent(container.id) + '/widgets', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          type: 'button',
-          size: 'md',
-          label: label || 'Action'
-        })
+      addTextBtn.addEventListener('click', async () => {
+        const label = prompt('Text label (for identification)?', 'Text');
+        const text = prompt('Initial text?', '');
+        const intervalStr = prompt('Auto-refresh interval in seconds (leave empty for no auto-refresh):', '');
+        const interval = intervalStr && !isNaN(parseInt(intervalStr)) ? parseInt(intervalStr) : null;
+        await fetch('/api/containers/' + encodeURIComponent(container.id) + '/widgets', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            type: 'text',
+            size: 'md',
+            label: label || 'Text',
+            text: text || '',
+            update_interval: interval
+          })
+        });
+        await renderWidgets();
       });
-      await renderWidgets();
-    });
+      addButtonBtn.addEventListener('click', async () => {
+        const label = prompt('Button label?', 'Action');
+        await fetch('/api/containers/' + encodeURIComponent(container.id) + '/widgets', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            type: 'button',
+            size: 'md',
+            label: label || 'Action'
+          })
+        });
+        await renderWidgets();
+      });
+    } else {
+      // Ensure toolbar stays hidden when Code module is disabled
+      if (toolbar) toolbar.classList.add('hidden');
+    }
 
     async function renderWidgets() {
       widgetsEl.innerHTML = '';
@@ -467,6 +510,31 @@ window.toggleExposed = async function (containerId, exposed) {
   } catch (err) {
     console.error("Error toggling exposed status:", err);
     window.toastManager.error('Failed to update exposed status: ' + err.message);
+  }
+};
+
+window.toggleMonitor = async function (containerId, enabled) {
+  if (!MONITOR_MODULE_ENABLED) return;
+  try {
+    const res = await fetch(`/api/monitor/container/${encodeURIComponent(containerId)}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ enabled })
+    });
+
+    if (!res.ok) {
+      const errorData = await res.json().catch(() => ({}));
+      throw new Error(errorData.error || "Failed to update monitor state");
+    }
+
+    const currentExpanded = expandedCompose;
+    expandedCompose = currentExpanded;
+    await window.renderComposeList();
+
+    window.toastManager.success(`Monitoring ${enabled ? 'enabled' : 'disabled'}`);
+  } catch (err) {
+    console.error("Error toggling monitor state:", err);
+    window.toastManager.error('Failed to update monitor state: ' + err.message);
   }
 };
 

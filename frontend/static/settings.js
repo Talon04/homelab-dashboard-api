@@ -212,6 +212,7 @@ async function loadModulesUI() {
   if (!list) return;
   const available = [
     { id: 'containers', label: 'Containers' },
+    { id: 'monitor', label: 'Monitor' },
     {
       id: 'proxmox', label: 'Proxmox VMs', config: {
         api_url: { label: 'API URL', type: 'text', placeholder: 'https://host:8006/api2/json' },

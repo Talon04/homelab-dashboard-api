@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Homelab Dashboard - Monitor</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="/static/custom_loader.js" defer></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', async () => {
+            try {
+                const res = await fetch('/api/config/modules');
+                if (res.ok) {
+                    const data = await res.json();
+                    const enabled = Array.isArray(data.modules) ? data.modules : [];
+                    if (!enabled.includes('monitor')) {
+                        window.location.href = '/settings';
+                    }
+                }
+            } catch (e) { }
+        });
+    </script>
+    <script src="/static/monitor.js" defer></script>
+    <script src="/static/nav.js" defer></script>
+</head>
+
+<body class="bg-gray-100">
+    <div class="container mx-auto p-4">
+        <div class="grid grid-cols-3 items-center mb-6">
+            <div class="justify-self-start flex items-center gap-2">
+                <a id="nav-left-arrow" href="/settings" class="text-blue-600 hover:text-blue-800">◀</a>
+                <a id="nav-left-link" href="/settings" class="text-sm text-gray-700 hover:text-blue-700">Settings</a>
+            </div>
+            <div class="justify-self-center">
+                <h1 class="text-2xl font-bold text-center">Homelab Dashboard</h1>
+            </div>
+            <div class="justify-self-end flex items-center gap-2">
+                <a id="nav-right-link" href="/settings" class="text-sm text-gray-700 hover:text-blue-700">Settings</a>
+                <a id="nav-right-arrow" href="/settings" class="text-blue-600 hover:text-blue-800">▶</a>
+            </div>
+        </div>
+
+        <div id="monitor-root" class="bg-white p-6 rounded shadow">
+            <h2 class="text-xl font-semibold mb-4">Monitor</h2>
+            <p class="text-gray-600 mb-4">Select what you want to monitor.</p>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                    <label for="monitor-container-select"
+                        class="block text-sm font-medium text-gray-700 mb-1">Containers</label>
+                    <select id="monitor-container-select"
+                        class="block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500">
+                        <option value="">Select a container...</option>
+                    </select>
+                </div>
+
+                <div>
+                    <label for="monitor-vm-select" class="block text-sm font-medium text-gray-700 mb-1">VMs</label>
+                    <select id="monitor-vm-select"
+                        class="block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500">
+                        <option value="">Select a VM...</option>
+                    </select>
+                </div>
+
+                <div>
+                    <label for="monitor-active-select"
+                        class="block text-sm font-medium text-gray-700 mb-1">Active Monitors</label>
+                    <select id="monitor-active-select"
+                        class="block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500">
+                        <option value="">Select an active monitor...</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+
+</html>

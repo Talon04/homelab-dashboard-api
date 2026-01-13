@@ -1,30 +1,49 @@
+"""Docker integration helpers with optional mock data.
+
+When the ``DONT_USE_DOCKER=1`` environment variable is set, these
+functions operate entirely on static mock data so the rest of the
+application can run without a Docker daemon.
+"""
+
 import os
 import docker
+
 dontUseDocker = os.environ.get("DONT_USE_DOCKER", "0") == "1"
 print(dontUseDocker)
+
+
 def list_containers():
+    """Return a list of containers, real or mocked.
+
+    Each entry contains ``id``, ``name``, ``status``, ``ports`` and
+    ``labels`` keys matching what the frontend expects.
+    """
+
     if dontUseDocker:
         return [
             {
-                "id" : "dadkönfm",
+                "id": "dadkönfm",
                 "name": "mock_container_1",
                 "status": "running",
                 "ports": {"80/tcp": [{"HostIp": "127.0.0.1", "HostPort": "8080"}]},
-                "labels": {"exposed": "true", "com.docker.compose.project": "mock_project"}
+                "labels": {
+                    "exposed": "true",
+                    "com.docker.compose.project": "mock_project",
+                },
             },
             {
-                "id" : "dadköndanwlänfm",                
+                "id": "dadköndanwlänfm",
                 "name": "mock_container_2",
                 "status": "exited",
                 "ports": {},
-                "labels": {"com.docker.compose.project": "mock_project"}
+                "labels": {"com.docker.compose.project": "mock_project"},
             },
             {
-                "id" : "dadköndanwlänfmdaw",
+                "id": "dadköndanwlänfmdaw",
                 "name": "mock_container_3",
                 "status": "exited",
                 "ports": {},
-                "labels": {}
+                "labels": {},
             },
         ]
     else:
@@ -34,11 +53,11 @@ def list_containers():
             containers = client.containers.list(all=True)
             return [
                 {
-                    "id" : c.id,
+                    "id": c.id,
                     "name": c.name,
                     "status": c.status,
-                    "ports": c.attrs['NetworkSettings']['Ports'],
-                    "labels": c.attrs.get('Config', {}).get('Labels', {})
+                    "ports": c.attrs["NetworkSettings"]["Ports"],
+                    "labels": c.attrs.get("Config", {}).get("Labels", {}),
                 }
                 for c in containers
             ]
@@ -46,19 +65,34 @@ def list_containers():
             print("[WARN] Docker not available, using mock data:", e)
             return []
 
+
 def get_container_ports(container_id):
+    """Return port mappings for a given container ID.
+
+    The structure matches Docker's API but is normalised into a list of
+    dictionaries with ``container_port``, ``host_ip`` and ``host_port``.
+    """
+
     if dontUseDocker:
         mock_ports = {
             "dadkönfm": [
-                {"container_port": "80/tcp", "host_ip": "127.0.0.1", "host_port": "8080"},
-                {"container_port": "19/udp", "host_ip": "127.0.0.1", "host_port": "9090"}
+                {
+                    "container_port": "80/tcp",
+                    "host_ip": "127.0.0.1",
+                    "host_port": "8080",
+                },
+                {
+                    "container_port": "19/udp",
+                    "host_ip": "127.0.0.1",
+                    "host_port": "9090",
+                },
             ],
             "dadköndanwlänfm": [
                 # No ports for this container
             ],
             "dadköndanwlänfmdaw": [
                 # No ports for this container
-            ]
+            ],
         }
         return mock_ports.get(container_id, [])
     else:
@@ -66,20 +100,21 @@ def get_container_ports(container_id):
         try:
             client = docker.from_env()
             container = client.containers.get(container_id)
-            ports = container.attrs['NetworkSettings']['Ports']
+            ports = container.attrs["NetworkSettings"]["Ports"]
             port_list = []
             for container_port, mappings in ports.items():
                 if mappings is None:
                     continue  # no port mapped
                 for m in mappings:
-                    port_list.append({
-                        "container_port": container_port,
-                        "host_ip": m["HostIp"],
-                        "host_port": m["HostPort"]
-                    })
+                    port_list.append(
+                        {
+                            "container_port": container_port,
+                            "host_ip": m["HostIp"],
+                            "host_port": m["HostPort"],
+                        }
+                    )
             return port_list
 
         except Exception as e:
             print("[WARN] Docker not available, using mock data:", e)
             return []
-

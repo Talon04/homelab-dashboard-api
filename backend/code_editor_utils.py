@@ -1,12 +1,25 @@
+"""Helper utilities for the built-in code editor.
+
+All paths handled here are relative to ``CODE_DIR`` and are validated
+through :func:`_safe_path` so that callers cannot escape the user_code
+directory via ``..`` or absolute paths.
+"""
+
 import os
 from typing import Dict, Any, List, Optional
-from paths import CODE_DIR
+from backend.paths import CODE_DIR
 
 # Normalize base directory to match normalized joined paths in _safe_path
 ALLOWED_BASE = os.path.normpath(CODE_DIR)
 
 
 def _safe_path(rel_path: str) -> str:
+    """Resolve a relative path under ``CODE_DIR`` and validate it.
+
+    Raises ``ValueError`` if the resulting path would escape the
+    configured user_code directory.
+    """
+
     rel_path = rel_path or ""
     joined = os.path.normpath(os.path.join(CODE_DIR, rel_path))
     if not joined.startswith(ALLOWED_BASE):
@@ -15,6 +28,12 @@ def _safe_path(rel_path: str) -> str:
 
 
 def list_tree(rel_path: str = "") -> Dict[str, Any]:
+    """Return a simple directory tree rooted at ``rel_path``.
+
+    The result contains ``dirs`` and ``files`` entries with names and
+    paths relative to ``CODE_DIR``.
+    """
+
     base = _safe_path(rel_path)
     tree = {"path": rel_path or "", "dirs": [], "files": []}
     try:
@@ -31,6 +50,8 @@ def list_tree(rel_path: str = "") -> Dict[str, Any]:
 
 
 def read_file(rel_path: str) -> Dict[str, Any]:
+    """Read a text file below ``CODE_DIR`` and return its content."""
+
     full = _safe_path(rel_path)
     if not os.path.exists(full) or not os.path.isfile(full):
         raise FileNotFoundError("File not found")
@@ -40,6 +61,8 @@ def read_file(rel_path: str) -> Dict[str, Any]:
 
 
 def write_file(rel_path: str, content: str) -> Dict[str, Any]:
+    """Write ``content`` to the given relative path under ``CODE_DIR``."""
+
     full = _safe_path(rel_path)
     os.makedirs(os.path.dirname(full), exist_ok=True)
     with open(full, "w", encoding="utf-8") as f:
@@ -48,6 +71,12 @@ def write_file(rel_path: str, content: str) -> Dict[str, Any]:
 
 
 def delete_path(rel_path: str) -> Dict[str, Any]:
+    """Delete a file or (empty) directory under ``CODE_DIR``.
+
+    Directories are only removed if they are empty to keep accidental
+    data loss surface small.
+    """
+
     full = _safe_path(rel_path)
     if os.path.isdir(full):
         # Only allow deletion of empty directories for safety
@@ -63,6 +92,13 @@ def delete_path(rel_path: str) -> Dict[str, Any]:
 
 
 def ensure_scaffold(rel_path: str, widget_type: Optional[str] = None) -> Dict[str, Any]:
+    """Create a reasonable default script file if it does not exist.
+
+    For ``.py`` files this writes a Python template that accepts the
+    widget context via ``sys.argv[1]``. For ``.js`` files it writes a
+    small IIFE that logs the provided context.
+    """
+
     full = _safe_path(rel_path)
     if os.path.exists(full):
         return {"path": rel_path, "ok": True, "created": False}

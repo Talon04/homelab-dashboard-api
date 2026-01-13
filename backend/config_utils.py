@@ -1,13 +1,23 @@
+"""High-level configuration helpers built on top of ConfigManager.
+
+This module bridges JSON configuration, Docker inspection and the
+database-backed SaveManager. It provides convenience functions for
+preferred ports, link bodies, IP addresses, feature flags and per-module
+configuration.
+"""
+
 import json
 import os
-import docker_utils
-from save_manager import get_save_manager
-from config_manager import config_manager
+import backend.docker_utils as docker_utils
+from backend.save_manager import get_save_manager
+from backend.config_manager import config_manager
 
 default_ip = "127.0.0.1"
 
 
 def guess_preferred_port(container_id):
+    """Heuristically choose a likely web port for a container."""
+
     ports = docker_utils.get_container_ports(container_id)
     # List of common web ports, in order of preference
     web_ports = ["80", "8080", "443", "8000", "5000", "3000"]
@@ -21,7 +31,10 @@ def guess_preferred_port(container_id):
         return ports[0].get("host_port", "default_port")
     return "null"
 
+
 def tryGeneratePreferredPorts():
+    """Generate a simple mapping of container IDs to first exposed port."""
+
     containers = docker_utils.list_containers()
     preferred_ports = {}
     for container in containers:
@@ -34,7 +47,10 @@ def tryGeneratePreferredPorts():
         preferred_ports[container_id] = port
     return preferred_ports
 
+
 def tryGenerateInternalLinkBodies():
+    """Generate basic internal link bodies for all known containers."""
+
     containers = docker_utils.list_containers()
     link_bodies = {}
     for container in containers:
@@ -49,7 +65,10 @@ def tryGenerateInternalLinkBodies():
         link_bodies[container_id] = link_body
     return link_bodies
 
+
 def get_preferred_port(container_id):
+    """Return the preferred host port for a container, guessing if needed."""
+
     save_manager = get_save_manager()
     port = save_manager.get_preferred_port(container_id)
     if port is None or port == "default_port":
@@ -58,12 +77,18 @@ def get_preferred_port(container_id):
         set_preferred_port(container_id, port)
     return port
 
+
 def set_preferred_port(container_id, port):
+    """Persist the preferred port for a container via SaveManager."""
+
     save_manager = get_save_manager()
     save_manager.set_preferred_port(container_id, port)
     print(f"Preferred port for {container_id} set to {port}")
 
+
 def get_link_body(container_id):
+    """Return the stored internal link body for a container."""
+
     save_manager = get_save_manager()
     result = save_manager.get_link_body(container_id)
     value = ""
@@ -76,13 +101,19 @@ def get_link_body(container_id):
         value = ""
     print(f"DEBUG: get_link_body({container_id}) -> {value}")
     return value
-    
+
+
 def set_link_body(container_id, link_body):
+    """Set the internal link body for a container."""
+
     save_manager = get_save_manager()
     save_manager.set_link_body(container_id, link_body)
     print(f"Internal Link Body for {container_id} set to {link_body}")
 
+
 def get_external_link_body(container_id):
+    """Return the stored external link body for a container."""
+
     save_manager = get_save_manager()
     result = save_manager.get_external_link_body(container_id)
     value = ""
@@ -95,96 +126,141 @@ def get_external_link_body(container_id):
         value = ""
     print(f"DEBUG: get_external_link_body({container_id}) -> {value}")
     return value
-    
+
+
 def set_external_link_body(container_id, link_body):
+    """Set the external link body for a container."""
+
     save_manager = get_save_manager()
     save_manager.set_external_link_body(container_id, link_body)
     print(f"External Link Body for {container_id} set to {link_body}")
 
+
 def get_exposed_containers():
+    """Return a list of container IDs marked as exposed."""
+
     save_manager = get_save_manager()
     return save_manager.get_exposed_containers()
 
+
 def set_exposed_containers(container, exposed):
+    """Update the exposed flag for a single container via SaveManager."""
+
     save_manager = get_save_manager()
     save_manager.set_exposed_containers(container, exposed)
     print(f"Exposed containers updated for {container}: {exposed}")
 
+
 def get_proxy_count():
+    """Return how many reverse proxies sit in front of Flask."""
+
     return int(config_manager.get("proxy_count", 0))
 
+
 def set_proxy_count(proxy_count):
+    """Persist the proxy count used to configure ``ProxyFix``."""
+
     config_manager.set("proxy_count", int(proxy_count))
     print(f"Proxy count set to {proxy_count}")
 
+
 def get_internal_ip():
+    """Return the internal IP address used in generated URLs."""
+
     return str(config_manager.get("internal_ip", default_ip))
 
+
 def set_internal_ip(ip):
+    """Set the internal IP and update existing internal link bodies."""
+
     # Get the old internal IP before changing it
     old_internal_ip = get_internal_ip()
-    
+
     # Set the new internal IP
     config_manager.set("internal_ip", ip)
     print(f"Internal IP set to {ip}")
-    
+
     # Update all internal link bodies that reference the old IP
     if old_internal_ip != ip:
         _update_link_bodies_with_new_ip("internal_link_bodies", old_internal_ip, ip)
         print(f"Updated internal link bodies from {old_internal_ip} to {ip}")
 
+
 def get_external_ip():
+    """Return the external IP address used in public URLs."""
+
     return str(config_manager.get("external_ip", default_ip))
 
+
 def set_external_ip(ip):
+    """Set the external IP and update existing external link bodies."""
+
     # Get the old external IP before changing it
     old_external_ip = get_external_ip()
-    
+
     # Set the new external IP
     config_manager.set("external_ip", ip)
     print(f"External IP set to {ip}")
-    
+
     # Update all external link bodies that reference the old IP
     if old_external_ip != ip:
         _update_link_bodies_with_new_ip("external_link_bodies", old_external_ip, ip)
         print(f"Updated external link bodies from {old_external_ip} to {ip}")
 
+
 def get_first_boot():
+    """Return True if the app considers this the first boot."""
+
     return bool(config_manager.get("first_boot", True))
 
+
 def set_first_boot(is_first_boot):
+    """Set or clear the first-boot flag."""
+
     config_manager.set("first_boot", bool(is_first_boot))
     print(f"First boot flag set to {is_first_boot}")
 
+
 def get_enabled_modules():
+    """Return the list of enabled feature modules."""
     mods = config_manager.get("enabled_modules", ["containers"]) or []
     return mods if isinstance(mods, list) else ["containers"]
 
+
 def set_enabled_modules(modules_list):
+    """Enable the given set of modules (list of IDs)."""
     if not isinstance(modules_list, list):
         return
     config_manager.set("enabled_modules", modules_list)
     print(f"Enabled modules set to {modules_list}")
 
+
 def get_modules_order():
+    """Return the desired display order for dashboard modules."""
     order = config_manager.get("modules_order", ["containers"]) or []
     if isinstance(order, list) and order:
         return order
     return get_enabled_modules()
 
+
 def set_modules_order(order_list):
+    """Persist the module ordering used by the frontend."""
     if not isinstance(order_list, list):
         return
     config_manager.set("modules_order", order_list)
     print(f"Modules order set to {order_list}")
 
+
 def get_module_config(module_id):
+    """Return the configuration dictionary for a single module."""
     if not module_id:
         return {}
     modules = config_manager.get("modules", {}) or {}
     return modules.get(module_id, {})
 
+
 def set_module_config(module_id, config_dict):
+    """Merge ``config_dict`` into the existing module configuration."""
     if not module_id or not isinstance(config_dict, dict):
         return
     modules = config_manager.get("modules", {}) or {}
@@ -192,22 +268,23 @@ def set_module_config(module_id, config_dict):
     config_manager.set("modules", modules)
     print(f"Updated module config for {module_id}")
 
+
 def _update_link_bodies_with_new_ip(link_bodies_key, old_ip, new_ip):
     """
     Helper function to update all link bodies that reference the old IP with the new IP.
     This handles both exact IP matches and common URL patterns.
     """
     save_manager = get_save_manager()
-    
+
     # Get all containers and update their link bodies
     containers = save_manager.get_all_containers()
     updated_count = 0
-    
+
     for container in containers:
         container_id = container.get("id")
         if not container_id:
             continue
-            
+
         # Check and update the appropriate link body type
         if link_bodies_key == "internal_link_bodies":
             link_body = container.get("internal_link_body")
@@ -223,7 +300,7 @@ def _update_link_bodies_with_new_ip(link_bodies_key, old_ip, new_ip):
                 save_manager.set_external_link_body(container_id, updated_link_body)
                 updated_count += 1
                 print(f"Updated {container_id}: {link_body} -> {updated_link_body}")
-    
+
     if updated_count > 0:
         print(f"Updated {updated_count} containers in {link_bodies_key}")
     else:

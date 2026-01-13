@@ -4,9 +4,9 @@ import sys
 import time
 from typing import Dict, Tuple
 
-import docker_utils
-import code_editor_utils
-from save_manager import get_save_manager
+import backend.docker_utils as docker_utils
+import backend.code_editor_utils as code_editor_utils
+from backend.save_manager import get_save_manager
 
 
 # (container_id, widget_id) -> last run timestamp (time.time())

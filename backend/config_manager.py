@@ -1,7 +1,7 @@
 import json
 import os
 from typing import Any, Dict, Optional
-from paths import BASE_DIR
+from backend.paths import BASE_DIR
 
 
 class ConfigManager:
@@ -38,7 +38,7 @@ class ConfigManager:
             "external_ip": "127.0.0.1",
             "first_boot": True,
             "enabled_modules": ["containers"],
-            "modules_order": ["containers", "proxmox"],
+            "modules_order": ["containers", "proxmox", "code_editor", "monitor"],
             "modules": {
                 "proxmox": {
                     "api_url": "https://proxmox.example:8006/api2/json",
@@ -52,6 +52,7 @@ class ConfigManager:
                     "custom_css": "",
                     "pages": ["containers"],
                 },
+                "monitor": {},
             },
         }
 

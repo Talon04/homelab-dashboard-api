@@ -3,7 +3,16 @@ from typing import Any, Dict, List, Optional
 from contextlib import contextmanager
 
 try:
-    from models import DatabaseManager, Container, ContainerPort, VM, ContainerWidget
+
+    from models import (
+        DatabaseManager,
+        Container,
+        ContainerPort,
+        VM,
+        ContainerWidget,
+        MonitorData,
+        MonitorPoints,
+    )
     from sqlalchemy.orm import Session
     from sqlalchemy import and_
 except ImportError:
@@ -13,6 +22,8 @@ except ImportError:
     ContainerPort = None
     VM = None
     ContainerWidget = None
+    MonitorData = None
+    MonitorPoints = None
     Session = None
 
 
@@ -53,8 +64,22 @@ class SaveManager:
     # No configuration (JSON) methods here. Use ConfigManager for config.
 
     # Container data methods (Database-based)
+    def _get_container_row_by_docker_id(self, session, docker_id: str):
+        """Return the Container row for a given Docker ID, or None."""
+        if not docker_id or Container is None:
+            return None
+        return (
+            session.query(Container)
+            .filter(Container.docker_id == str(docker_id))
+            .first()
+        )
+
     def get_container(self, container_id: str) -> Optional[Dict]:
-        """Get container data by ID"""
+        """Get container data by Docker ID.
+
+        ``container_id`` here refers to the Docker/container engine ID,
+        not the internal database primary key.
+        """
         if self.db_manager is None:
             return None
 
@@ -62,12 +87,12 @@ class SaveManager:
             if session is None:
                 return None
 
-            container = (
-                session.query(Container).filter(Container.id == container_id).first()
-            )
+            container = self._get_container_row_by_docker_id(session, container_id)
             if container:
                 return {
-                    "id": container.id,
+                    # Expose Docker ID as "id" for backwards compatibility
+                    "id": container.docker_id,
+                    "db_id": container.id,
                     "name": container.name,
                     "image": container.image,
                     "status": container.status,
@@ -97,30 +122,39 @@ class SaveManager:
             if session is None:
                 return
 
-            container_id = container_data.get("id")
-            if not container_id:
+            docker_id = container_data.get("docker_id") or container_data.get("id")
+            if not docker_id:
                 return
 
             # Check if container exists
-            container = (
-                session.query(Container).filter(Container.id == container_id).first()
-            )
+            container = self._get_container_row_by_docker_id(session, docker_id)
 
             if container:
                 # Update existing container
                 for key, value in container_data.items():
-                    if hasattr(container, key) and key != "id":
+                    if key == "id":
+                        # Never overwrite the internal PK from payload
+                        continue
+                    if key == "docker_id":
+                        setattr(container, "docker_id", value)
+                        continue
+                    if hasattr(container, key):
                         setattr(container, key, value)
             else:
                 # Create new container - ensure required fields have defaults
                 required_defaults = {
-                    "name": container_data.get("name", f"container_{container_id[:8]}"),
+                    "name": container_data.get(
+                        "name", f"container_{str(docker_id)[:8]}"
+                    ),
                     "image": container_data.get("image", "unknown"),
                     "status": container_data.get("status", "unknown"),
                 }
 
                 # Merge defaults with provided data
                 full_container_data = {**required_defaults, **container_data}
+                # Ensure we pass docker_id explicitly and never an "id" field
+                full_container_data.pop("id", None)
+                full_container_data.setdefault("docker_id", docker_id)
                 container = Container(**full_container_data)
                 session.add(container)
 
@@ -168,7 +202,7 @@ class SaveManager:
             exposed_ids: List[str] = []
             for container in containers:
                 if getattr(container, "is_exposed", False):
-                    cid = getattr(container, "id", None)
+                    cid = getattr(container, "docker_id", None)
                     if cid:
                         exposed_ids.append(cid)
             return exposed_ids
@@ -182,10 +216,8 @@ class SaveManager:
             if session is None:
                 return
 
-            # Check if container exists
-            container = (
-                session.query(Container).filter(Container.id == container_id).first()
-            )
+            # ``container_id`` here is the Docker ID; look up the row via docker_id
+            container = self._get_container_row_by_docker_id(session, container_id)
 
             if container:
                 # Update existing container
@@ -218,7 +250,7 @@ class SaveManager:
 
                 # Create new container with required fields
                 container = Container(
-                    id=container_id,
+                    docker_id=container_id,
                     name=container_name,
                     image=container_image,
                     status=container_status,
@@ -238,7 +270,9 @@ class SaveManager:
             containers = session.query(Container).all()
             return [
                 {
-                    "id": container.id,
+                    # Keep external ID as "id" for compatibility, and expose db_id separately
+                    "id": container.docker_id,
+                    "db_id": container.id,
                     "name": container.name,
                     "image": container.image,
                     "status": container.status,
@@ -276,7 +310,41 @@ class SaveManager:
                 for container in containers
             ]
 
+    def get_all_vms(self) -> List[Dict]:
+        """Get all VMs"""
+        if self.db_manager is None:
+            return []
+
+        with self.get_db_session() as session:
+            if session is None:
+                return []
+
+            vms = session.query(VM).all()
+            return [
+                {
+                    # External Proxmox ID is the primary identifier for callers
+                    "id": vm.proxmox_id,
+                    "db_id": vm.id,
+                    "proxmox_id": vm.proxmox_id,
+                    "name": vm.name,
+                    "status": vm.status,
+                    "cpu_cores": vm.cpu_cores,
+                    "memory_mb": vm.memory_mb,
+                    "disk_gb": vm.disk_gb,
+                    "ip_address": vm.ip_address,
+                    "preferred_port": vm.preferred_port,
+                    "internal_link_body": vm.internal_link_body,
+                    "external_link_body": vm.external_link_body,
+                    "is_exposed": vm.is_exposed,
+                    "created_at": vm.created_at.isoformat() if vm.created_at else None,
+                    "updated_at": vm.updated_at.isoformat() if vm.updated_at else None,
+                }
+                for vm in vms
+            ]
+
     def get_containers_by_widget(self, widget_id: int) -> List[Dict]:
+        """Return all containers that have the given widget attached."""
+
         if self.db_manager is None:
             return []
 
@@ -291,7 +359,9 @@ class SaveManager:
             )
             return [
                 {
-                    "id": container.id,
+                    # External Docker ID and internal DB ID
+                    "id": container.docker_id,
+                    "db_id": container.id,
                     "name": container.name,
                     "image": container.image,
                     "status": container.status,
@@ -331,14 +401,24 @@ class SaveManager:
 
     # Widgets CRUD
     def get_widgets(self, container_id: str) -> List[Dict]:
+        """Return all widgets attached to a specific container.
+
+        ``container_id`` is the external Docker ID; the internal
+        container PK is resolved inside this method.
+        """
+
         if self.db_manager is None or ContainerWidget is None:
             return []
         with self.get_db_session() as session:
             if session is None:
                 return []
+            # container_id here is the Docker ID; resolve to internal PK
+            cont = self._get_container_row_by_docker_id(session, container_id)
+            if cont is None:
+                return []
             qs = (
                 session.query(ContainerWidget)
-                .filter(ContainerWidget.container_id == container_id)
+                .filter(ContainerWidget.container_id == cont.id)
                 .order_by(ContainerWidget.sort_order, ContainerWidget.id)
                 .all()
             )
@@ -358,6 +438,12 @@ class SaveManager:
             ]
 
     def get_all_widgets(self) -> List[Dict]:
+        """Return all widgets across all containers.
+
+        The returned objects contain both the external ``container_id``
+        (Docker ID) and ``container_db_id`` (internal PK).
+        """
+
         if self.db_manager is None or ContainerWidget is None:
             return []
         with self.get_db_session() as session:
@@ -368,29 +454,44 @@ class SaveManager:
                 .order_by(ContainerWidget.sort_order, ContainerWidget.id)
                 .all()
             )
-            return [
-                {
-                    "container_id": w.container_id,
-                    "id": w.id,
-                    "type": w.type,
-                    "size": w.size,
-                    "label": w.label,
-                    "text": w.text,
-                    "file_path": w.file_path,
-                    "update_interval": w.update_interval,
-                    "sort_order": w.sort_order,
-                }
-                for w in qs
-            ]
+            widgets: List[Dict[str, Any]] = []
+            for w in qs:
+                cont = getattr(w, "container", None)
+                docker_id = (
+                    getattr(cont, "docker_id", None) if cont is not None else None
+                )
+                db_id = getattr(cont, "id", None) if cont is not None else None
+                widgets.append(
+                    {
+                        # For callers like the scheduler, container_id is the external Docker ID
+                        "container_id": docker_id,
+                        "container_db_id": db_id,
+                        "id": w.id,
+                        "type": w.type,
+                        "size": w.size,
+                        "label": w.label,
+                        "text": w.text,
+                        "file_path": w.file_path,
+                        "update_interval": w.update_interval,
+                        "sort_order": w.sort_order,
+                    }
+                )
+            return widgets
 
     def add_widget(self, container_id: str, data: Dict[str, Any]) -> Optional[Dict]:
+        """Create a new widget for the given container (Docker ID)."""
+
         if self.db_manager is None or ContainerWidget is None:
             return None
         with self.get_db_session() as session:
             if session is None:
                 return None
+            # container_id argument is Docker ID; convert to internal PK
+            cont = self._get_container_row_by_docker_id(session, container_id)
+            if cont is None:
+                return None
             w = ContainerWidget(
-                container_id=container_id,
+                container_id=cont.id,
                 type=str(data.get("type") or "text"),
                 size=str(data.get("size") or "md"),
                 label=(data.get("label") or None),
@@ -419,16 +520,25 @@ class SaveManager:
     def update_widget(
         self, container_id: str, widget_id: int, data: Dict[str, Any]
     ) -> bool:
+        """Update selected fields of an existing widget.
+
+        The widget is looked up by its ID and the Docker ID of its
+        parent container; unknown widgets return ``False``.
+        """
+
         if self.db_manager is None or ContainerWidget is None:
             return False
         with self.get_db_session() as session:
             if session is None:
                 return False
+            cont = self._get_container_row_by_docker_id(session, container_id)
+            if cont is None:
+                return False
             w = (
                 session.query(ContainerWidget)
                 .filter(
                     ContainerWidget.id == widget_id,
-                    ContainerWidget.container_id == container_id,
+                    ContainerWidget.container_id == cont.id,
                 )
                 .first()
             )
@@ -448,16 +558,21 @@ class SaveManager:
             return True
 
     def delete_widget(self, container_id: str, widget_id: int) -> bool:
+        """Delete a widget belonging to the specified container."""
+
         if self.db_manager is None or ContainerWidget is None:
             return False
         with self.get_db_session() as session:
             if session is None:
                 return False
+            cont = self._get_container_row_by_docker_id(session, container_id)
+            if cont is None:
+                return False
             w = (
                 session.query(ContainerWidget)
                 .filter(
                     ContainerWidget.id == widget_id,
-                    ContainerWidget.container_id == container_id,
+                    ContainerWidget.container_id == cont.id,
                 )
                 .first()
             )
@@ -466,9 +581,121 @@ class SaveManager:
             session.delete(w)
             return True
 
+    # Monitor data helpers
+    def get_monitor_for_container(self, container_id: str) -> Optional[Dict[str, Any]]:
+        """Return monitor configuration for a given container, if any."""
+        if self.db_manager is None or MonitorData is None:
+            return None
+
+        with self.get_db_session() as session:
+            if session is None:
+                return None
+            # container_id argument is Docker ID; resolve to internal PK
+            cont = self._get_container_row_by_docker_id(session, container_id)
+            if cont is None:
+                return None
+
+            md = (
+                session.query(MonitorData)
+                .filter(MonitorData.container_id == cont.id)
+                .first()
+            )
+            if not md:
+                return None
+            return {
+                "id": md.id,
+                "container_id": md.container_id,
+                "vm_id": md.vm_id,
+                "monitor_type": md.monitor_type,
+                "notification_type": md.notification_type,
+                "enabled": bool(md.enabled),
+            }
+
+    def set_monitor_for_container(
+        self,
+        container_id: str,
+        enabled: bool,
+        monitor_type: str = "docker",
+        notification_type: str = "none",
+    ) -> Optional[Dict[str, Any]]:
+        """Create or update monitor configuration for a container.
+
+        A single MonitorData row is kept per container; this toggles the
+        ``enabled`` flag and initialises sensible defaults on first use.
+        """
+
+        if self.db_manager is None or MonitorData is None:
+            return None
+
+        with self.get_db_session() as session:
+            if session is None:
+                return None
+            cont = self._get_container_row_by_docker_id(session, container_id)
+            if cont is None:
+                return None
+
+            md = (
+                session.query(MonitorData)
+                .filter(MonitorData.container_id == cont.id)
+                .first()
+            )
+            if md is None:
+                md = MonitorData(
+                    container_id=cont.id,
+                    monitor_type=str(monitor_type or "docker"),
+                    notification_type=str(notification_type or "none"),
+                    enabled=bool(enabled),
+                )
+                session.add(md)
+                session.flush()
+            else:
+                md.enabled = bool(enabled)
+                # Only set defaults if fields are missing
+                if not md.monitor_type:
+                    md.monitor_type = str(monitor_type or "docker")
+                if not md.notification_type:
+                    md.notification_type = str(notification_type or "none")
+
+            return {
+                "id": md.id,
+                "container_id": md.container_id,
+                "vm_id": md.vm_id,
+                "monitor_type": md.monitor_type,
+                "notification_type": md.notification_type,
+                "enabled": bool(md.enabled),
+            }
+
+    def get_all_monitor_bodies(self) -> List[Dict[str, Any]]:
+        """Get all monitor_bodies (monitor configurations for containers/VMs)."""
+        if self.db_manager is None or MonitorData is None:
+            return []
+
+        with self.get_db_session() as session:
+            if session is None:
+                return []
+
+            entries = session.query(MonitorData).all()
+            return [
+                {
+                    "id": md.id,
+                    "container_id": md.container_id,
+                    "vm_id": md.vm_id,
+                    "monitor_type": md.monitor_type,
+                    "notification_type": md.notification_type,
+                    "enabled": bool(md.enabled),
+                }
+                for md in entries
+            ]
+
     # VM methods (for future use)
+    def _get_vm_row_by_proxmox_id(self, session, proxmox_id: str):
+        """Return the VM row for a given Proxmox ID, or None."""
+        if not proxmox_id or VM is None:
+            return None
+        return session.query(VM).filter(VM.proxmox_id == str(proxmox_id)).first()
+
     def get_vm(self, vm_id: str) -> Optional[Dict]:
-        """Get VM data by ID"""
+        """Get VM data by Proxmox ID (external identifier)."""
         if self.db_manager is None:
             return None
 
@@ -476,10 +703,11 @@ class SaveManager:
             if session is None:
                 return None
 
-            vm = session.query(VM).filter(VM.id == vm_id).first()
+            vm = self._get_vm_row_by_proxmox_id(session, vm_id)
             if vm:
                 return {
-                    "id": vm.id,
+                    "id": vm.proxmox_id,
+                    "db_id": vm.id,
                     "name": vm.name,
                     "status": vm.status,
                     "cpu_cores": vm.cpu_cores,
@@ -504,21 +732,30 @@ class SaveManager:
             if session is None:
                 return
 
-            vm_id = vm_data.get("id")
-            if not vm_id:
+            vm_ext_id = vm_data.get("proxmox_id") or vm_data.get("id")
+            if not vm_ext_id:
                 return
 
             # Check if VM exists
-            vm = session.query(VM).filter(VM.id == vm_id).first()
+            vm = self._get_vm_row_by_proxmox_id(session, vm_ext_id)
 
             if vm:
                 # Update existing VM
                 for key, value in vm_data.items():
-                    if hasattr(vm, key) and key != "id":
+                    if key == "id":
+                        # never overwrite internal PK
+                        continue
+                    if key == "proxmox_id":
+                        setattr(vm, "proxmox_id", value)
+                        continue
+                    if hasattr(vm, key):
                         setattr(vm, key, value)
             else:
                 # Create new VM
-                vm = VM(**vm_data)
+                clean_data = dict(vm_data)
+                clean_data.pop("id", None)
+                clean_data.setdefault("proxmox_id", vm_ext_id)
+                vm = VM(**clean_data)
                 session.add(vm)
 
 

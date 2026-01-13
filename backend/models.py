@@ -25,7 +25,8 @@ class Container(Base):
 
     __tablename__ = "containers"
 
-    id = Column(String, primary_key=True)  # Docker container ID
+    id = Column(Integer, primary_key=True, autoincrement=True)  # internal DB ID
+    docker_id = Column(String, unique=True, nullable=False)  # Docker container ID
     name = Column(String, nullable=False)
     image = Column(String, nullable=False)
     status = Column(String, nullable=False)
@@ -52,7 +53,7 @@ class ContainerPort(Base):
     __tablename__ = "container_ports"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    container_id = Column(String, ForeignKey("containers.id"), nullable=False)
+    container_id = Column(Integer, ForeignKey("containers.id"), nullable=False)
     internal_port = Column(Integer, nullable=False)
     external_port = Column(Integer, nullable=True)
     protocol = Column(String, default="tcp")
@@ -66,7 +67,10 @@ class VM(Base):
 
     __tablename__ = "vms"
 
-    id = Column(String, primary_key=True)  # VM identifier
+    id = Column(Integer, primary_key=True, autoincrement=True)  # internal DB ID
+    proxmox_id = Column(
+        String, unique=True, nullable=False
+    )  # VM identifier from Proxmox
     name = Column(String, nullable=False)
     status = Column(String, nullable=False)
     cpu_cores = Column(Integer, nullable=True)
@@ -87,7 +91,7 @@ class ContainerWidget(Base):
     __tablename__ = "container_widgets"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    container_id = Column(String, ForeignKey("containers.id"), nullable=False)
+    container_id = Column(Integer, ForeignKey("containers.id"), nullable=False)
     type = Column(String, nullable=False)  # 'text' | 'button'
     size = Column(String, default="md")  # 'sm' | 'md' | 'lg'
     label = Column(String, nullable=True)  # for buttons
@@ -101,6 +105,32 @@ class ContainerWidget(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     container = relationship("Container", back_populates="widgets")
+
+
+class MonitorData(Base):
+    """Model for monitor configuration entries ("monitor_bodies")."""
+
+    __tablename__ = "monitor_bodies"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    container_id = Column(Integer, ForeignKey("containers.id"), nullable=True)
+    vm_id = Column(Integer, ForeignKey("vms.id"), nullable=True)
+    monitor_type = Column(
+        String, nullable=False
+    )  # monitoring types, like 'docker','tcp', 'ping'
+    notification_type = Column(String, nullable=False)  # 'mail', 'push', etc.
+    enabled = Column(Boolean, default=True)
+
+
+class MonitorPoints(Base):
+    """Model for monitoring data points"""
+
+    __tablename__ = "monitor_points"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    monitor_data_id = Column(Integer, ForeignKey("monitor_bodies.id"), nullable=False)
+    timestamp = Column(DateTime, default=datetime.utcnow)
+    value = Column(String, nullable=False)  # e.g. went offline/online/unknown
 
 
 class DatabaseManager:

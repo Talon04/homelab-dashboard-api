@@ -34,6 +34,7 @@
       case 'containers': return { href: '/containers', label: 'Containers' };
       case 'proxmox': return { href: '/proxmox', label: 'Proxmox' };
       case 'code_editor': return { href: '/code', label: 'Code' };
+      case 'monitor': return { href: '/monitor', label: 'Monitor' };
       default: return null;
     }
   }
@@ -84,6 +85,7 @@
     if (path.startsWith('/containers')) return 'containers';
     if (path.startsWith('/proxmox')) return 'proxmox';
     if (path.startsWith('/code')) return 'code_editor';
+    if (path.startsWith('/monitor')) return 'monitor';
     return 'settings';
   }
 
