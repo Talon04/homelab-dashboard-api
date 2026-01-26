@@ -6,12 +6,15 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 
 import backend.config_utils
 from backend.task_scheduler import start_widget_scheduler
+from backend.monitoring_service import start_monitoring_service
+from backend.notification_service import start_notification_service
 
 from backend.routes_bps.pages_routes import pages_bp
 from backend.routes_bps.containers_routes import containers_bp
 from backend.routes_bps.config_routes import config_bp
 from backend.routes_bps.code_routes import code_bp
 from backend.routes_bps.monitor_routes import monitor_bp
+from backend.routes_bps.notification_routes import notification_bp
 
 app = Flask(
     __name__,
@@ -31,6 +34,16 @@ def start_background_tasks():
         print("[app] Widget scheduler started")
     except Exception as e:
         print(f"Warning: failed to start widget scheduler: {e}")
+    try:
+        start_monitoring_service()
+        print("[app] Monitoring service started")
+    except Exception as e:
+        print(f"Warning: failed to start monitoring service: {e}")
+    try:
+        start_notification_service()
+        print("[app] Notification service started")
+    except Exception as e:
+        print(f"Warning: failed to start notification service: {e}")
 
 
 # Configure proxy fix based on config
@@ -55,3 +68,4 @@ app.register_blueprint(containers_bp)
 app.register_blueprint(config_bp)
 app.register_blueprint(code_bp)
 app.register_blueprint(monitor_bp)
+app.register_blueprint(notification_bp)

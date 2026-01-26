@@ -28,11 +28,21 @@ def api_set_container_monitor(container_id):
     Body: {"enabled": true|false}
     """
 
-    data = request.get_json() or {}
+    # Debug: log raw request info
+    print(f"DEBUG monitor POST: content_type={request.content_type}")
+    print(f"DEBUG monitor POST: raw data={request.data}")
+    
+    data = request.get_json(silent=True, force=True)
+    print(f"DEBUG monitor POST: parsed json={data}, type={type(data)}")
+
+    # Handle case where JSON parsing fails or returns non-dict
+    if not isinstance(data, dict):
+        return jsonify({"error": f"Invalid JSON body, got {type(data).__name__}"}), 400
+
     if "enabled" not in data:
         return jsonify({"error": "Missing enabled"}), 400
 
-    enabled = bool(data.get("enabled"))
+    enabled = bool(data["enabled"])
     sm = get_save_manager()
     result = sm.set_monitor_for_container(container_id, enabled)
     if result is None:

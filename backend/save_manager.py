@@ -4,13 +4,13 @@ from contextlib import contextmanager
 
 try:
 
-    from models import (
+    from backend.models import (
         DatabaseManager,
         Container,
         ContainerPort,
         VM,
         ContainerWidget,
-        MonitorData,
+        MonitorBodies,
         MonitorPoints,
     )
     from sqlalchemy.orm import Session
@@ -22,7 +22,7 @@ except ImportError:
     ContainerPort = None
     VM = None
     ContainerWidget = None
-    MonitorData = None
+    MonitorBodies = None
     MonitorPoints = None
     Session = None
 
@@ -584,7 +584,7 @@ class SaveManager:
     # Monitor data helpers
     def get_monitor_for_container(self, container_id: str) -> Optional[Dict[str, Any]]:
         """Return monitor configuration for a given container, if any."""
-        if self.db_manager is None or MonitorData is None:
+        if self.db_manager is None or MonitorBodies is None:
             return None
 
         with self.get_db_session() as session:
@@ -596,8 +596,8 @@ class SaveManager:
                 return None
 
             md = (
-                session.query(MonitorData)
-                .filter(MonitorData.container_id == cont.id)
+                session.query(MonitorBodies)
+                .filter(MonitorBodies.container_id == cont.id)
                 .first()
             )
             if not md:
@@ -624,7 +624,7 @@ class SaveManager:
         ``enabled`` flag and initialises sensible defaults on first use.
         """
 
-        if self.db_manager is None or MonitorData is None:
+        if self.db_manager is None or MonitorBodies is None:
             return None
 
         with self.get_db_session() as session:
@@ -632,15 +632,45 @@ class SaveManager:
                 return None
             cont = self._get_container_row_by_docker_id(session, container_id)
             if cont is None:
-                return None
+                # Auto-create container row if it doesn't exist
+                if Container is None:
+                    return None
+
+                container_name = f"container_{container_id[:8]}"
+                container_image = "unknown"
+                container_status = "unknown"
+
+                try:
+                    from backend import docker_utils
+
+                    containers = docker_utils.list_containers()
+                    docker_container = next(
+                        (c for c in containers if c.get("id") == container_id), None
+                    )
+
+                    if docker_container:
+                        container_name = docker_container.get("name", container_name)
+                        container_image = docker_container.get("image", container_image)
+                        container_status = docker_container.get("state", container_status)
+                except Exception as e:
+                    print(f"Warning: Could not get container data for {container_id}: {e}")
+
+                cont = Container(
+                    docker_id=container_id,
+                    name=container_name,
+                    image=container_image,
+                    status=container_status,
+                )
+                session.add(cont)
+                session.flush()
 
             md = (
-                session.query(MonitorData)
-                .filter(MonitorData.container_id == cont.id)
+                session.query(MonitorBodies)
+                .filter(MonitorBodies.container_id == cont.id)
                 .first()
             )
             if md is None:
-                md = MonitorData(
+                md = MonitorBodies(
                     container_id=cont.id,
                     monitor_type=str(monitor_type or "docker"),
                     notification_type=str(notification_type or "none"),
@@ -667,14 +697,14 @@ class SaveManager:
 
     def get_all_monitor_bodies(self) -> List[Dict[str, Any]]:
         """Get all monitor_bodies (monitor configurations for containers/VMs)."""
-        if self.db_manager is None or MonitorData is None:
+        if self.db_manager is None or MonitorBodies is None:
             return []
 
         with self.get_db_session() as session:
             if session is None:
                 return []
 
-            entries = session.query(MonitorData).all()
+            entries = session.query(MonitorBodies).all()
             return [
                 {
                     "id": md.id,

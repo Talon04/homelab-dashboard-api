@@ -118,3 +118,26 @@ def get_container_ports(container_id):
         except Exception as e:
             print("[WARN] Docker not available, using mock data:", e)
             return []
+def get_container_status_by_id(container_id):
+    """Return the status of a container by its Docker ID.
+
+    Returns a string such as 'running', 'exited', etc., or 'unknown'
+    if the container is not found.
+    """
+
+    if dontUseDocker:
+        mock_statuses = {
+            "dadkönfm": "running",
+            "dadköndanwlänfm": "exited",
+            "dadköndanwlänfmdaw": "exited",
+        }
+        return mock_statuses.get(container_id, "unknown")
+    else:
+        print("[DEBUG] Attempting real Docker access")
+        try:
+            client = docker.from_env()
+            container = client.containers.get(container_id)
+            return container.status
+        except Exception as e:
+            print("[WARN] Docker not available, using mock data:", e)
+            return "unknown"

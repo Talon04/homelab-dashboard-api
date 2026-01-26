@@ -15,7 +15,7 @@ from sqlalchemy.orm import sessionmaker, relationship
 from datetime import datetime
 import os
 
-from paths import DATA_DIR
+from backend.paths import DATA_DIR
 
 Base = declarative_base()
 
@@ -107,7 +107,7 @@ class ContainerWidget(Base):
     container = relationship("Container", back_populates="widgets")
 
 
-class MonitorData(Base):
+class MonitorBodies(Base):
     """Model for monitor configuration entries ("monitor_bodies")."""
 
     __tablename__ = "monitor_bodies"
@@ -131,6 +131,85 @@ class MonitorPoints(Base):
     monitor_data_id = Column(Integer, ForeignKey("monitor_bodies.id"), nullable=False)
     timestamp = Column(DateTime, default=datetime.utcnow)
     value = Column(String, nullable=False)  # e.g. went offline/online/unknown
+
+
+class Event(Base):
+    __tablename__ = "events"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    timestamp = Column(DateTime, default=datetime.utcnow)
+
+    severity = Column(Integer, nullable=False)
+    # 1 = info | 2 = warning | 3 = critical etc.. (extendable,higher = more severe)
+
+    source = Column(String, nullable=False)
+    # monitor | script | docker | vm | system
+
+    title = Column(String, nullable=False)
+    message = Column(Text, nullable=False)
+
+    object_type = Column(String, nullable=True)
+    # "container" | "vm" | "monitor" | "script"
+
+    object_id = Column(Integer, nullable=True)
+    # id in its table
+
+    fingerprint = Column(String, nullable=False)
+    # used for deduplication
+
+    acknowledged = Column(Boolean, default=False)
+    acknowledged_at = Column(DateTime, nullable=True)
+
+
+class EventDelivery(Base):
+    __tablename__ = "event_deliveries"
+
+    id = Column(Integer, primary_key=True)
+    event_id = Column(Integer, ForeignKey("events.id"), nullable=False)
+
+    channel_id = Column(Integer, ForeignKey("notification_channels.id"), nullable=False)
+    # discord | push | email | webhook
+
+    status = Column(String, default="pending")
+    # pending | sent | failed
+
+    last_attempt = Column(DateTime)
+    error = Column(Text, nullable=True)
+
+
+class NotificationChannel(Base):
+    """Configuration for a notification delivery channel."""
+
+    __tablename__ = "notification_channels"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    name = Column(String, nullable=False)  # user-friendly name
+    channel_type = Column(String, nullable=False)
+    # discord | push | email | webhook
+
+    enabled = Column(Boolean, default=True)
+
+    # Channel-specific config stored as JSON string
+    config = Column(Text, nullable=True)
+    # e.g. {"webhook_url": "..."} for discord
+    # e.g. {"email": "...", "smtp_server": "..."} for email
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class NotificationRule(Base):
+    """Maps severity levels to notification channels."""
+
+    __tablename__ = "notification_rules"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    channel_id = Column(Integer, ForeignKey("notification_channels.id"), nullable=False)
+    min_severity = Column(Integer, nullable=False)
+    # Events with severity >= min_severity will be sent to this channel
+
+    enabled = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
 
 
 class DatabaseManager:

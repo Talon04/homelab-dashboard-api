@@ -99,7 +99,6 @@ def get_link_body(container_id):
             value = result
     except Exception:
         value = ""
-    print(f"DEBUG: get_link_body({container_id}) -> {value}")
     return value
 
 
@@ -124,7 +123,6 @@ def get_external_link_body(container_id):
             value = result
     except Exception:
         value = ""
-    print(f"DEBUG: get_external_link_body({container_id}) -> {value}")
     return value
 
 
