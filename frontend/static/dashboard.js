@@ -1,3 +1,17 @@
+/**
+ * =============================================================================
+ * DASHBOARD.JS - Main containers dashboard logic
+ * =============================================================================
+ * 
+ * Handles rendering of Docker compose projects and their containers,
+ * including port configurations, link management, monitoring toggles
+ * and widget display.
+ */
+
+// =============================================================================
+// GLOBAL STATE
+// =============================================================================
+
 let IP_FOR_INTERNAL_LINKS = "127.0.0.1";
 let IP_FOR_EXPOSED_LINKS = "127.0.0.1";
 let expandedCompose = null;

@@ -1,0 +1,86 @@
+<!-- Notification Bell Icon and Panel - included in navbar -->
+<div id="notification-bell-container" class="relative">
+    <button id="notification-bell-btn" class="relative p-1 text-gray-600 hover:text-gray-800 focus:outline-none">
+        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9">
+            </path>
+        </svg>
+        <span id="notification-badge"
+            class="hidden absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">0</span>
+    </button>
+
+    <!-- Notification Panel Dropdown -->
+    <div id="notification-panel"
+        class="hidden absolute right-0 mt-2 w-96 bg-white rounded-lg shadow-xl z-50 border border-gray-200">
+
+        <!-- Main Content (Event List) -->
+        <div id="notification-main-content">
+            <div class="flex items-center justify-between p-3 border-b border-gray-200">
+                <h3 class="font-semibold text-gray-900">Notifications</h3>
+                <div class="flex items-center gap-2">
+                    <button id="notification-ack-all" class="text-xs text-blue-600 hover:text-blue-800">Mark all
+                        read</button>
+                    <button id="notification-delete-all" class="p-1 text-red-500 hover:text-red-700"
+                        title="Delete all notifications">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16">
+                            </path>
+                        </svg>
+                    </button>
+                    <button id="notification-settings-btn" class="p-1 text-gray-500 hover:text-gray-700"
+                        title="Settings">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z">
+                            </path>
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M15 12a3 3 0 11-6 0 3 3 0 016 0z">
+                            </path>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+            <div id="notification-list" class="max-h-96 overflow-y-auto"></div>
+        </div>
+
+        <!-- Settings Panel (hidden by default) -->
+        <div id="notification-settings-panel" class="hidden">
+            <div class="flex items-center gap-2 p-3 border-b border-gray-200">
+                <button id="notification-settings-back" class="p-1 text-gray-500 hover:text-gray-700">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7">
+                        </path>
+                    </svg>
+                </button>
+                <h3 class="font-semibold text-gray-900">Notification Settings</h3>
+            </div>
+            <div class="p-3 max-h-96 overflow-y-auto">
+                <!-- Channels Section -->
+                <div class="mb-4">
+                    <div class="flex items-center justify-between mb-2">
+                        <h4 class="font-medium text-sm text-gray-700">Delivery Channels</h4>
+                        <button id="add-channel-btn" class="text-xs text-blue-600 hover:text-blue-800">+ Add</button>
+                    </div>
+                    <div id="notification-channels-list"></div>
+                </div>
+                <!-- Rules Section -->
+                <div>
+                    <div class="flex items-center justify-between mb-2">
+                        <h4 class="font-medium text-sm text-gray-700">Severity Rules</h4>
+                        <button id="add-rule-btn" class="text-xs text-blue-600 hover:text-blue-800">+ Add</button>
+                    </div>
+                    <p class="text-xs text-gray-500 mb-2">Common: 1=Info, 2=Warning, 3=Critical, 4=Emergency</p>
+                    <div id="notification-rules-list"></div>
+                    <div class="mt-4 pt-4 border-t border-gray-200">
+                        <button id="test-notification-btn"
+                            class="w-full px-4 py-2 bg-blue-500 text-white text-sm font-medium rounded hover:bg-blue-600 transition-colors">
+                            Send Test Notification
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

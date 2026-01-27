@@ -1,3 +1,6 @@
+# =============================================================================
+# CONFIG ROUTES - Configuration API endpoints
+# =============================================================================
 """Flask routes that expose configuration values over HTTP."""
 
 from flask import Blueprint, jsonify, request
@@ -5,7 +8,16 @@ from flask import Blueprint, jsonify, request
 import backend.config_utils as config_utils
 
 
+# =============================================================================
+# BLUEPRINT REGISTRATION
+# =============================================================================
+
 config_bp = Blueprint("config", __name__)
+
+
+# =============================================================================
+# PROXY CONFIGURATION
+# =============================================================================
 
 
 @config_bp.route("/api/config/proxy_count")

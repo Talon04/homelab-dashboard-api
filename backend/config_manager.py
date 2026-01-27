@@ -1,7 +1,22 @@
+# =============================================================================
+# CONFIG MANAGER - JSON-backed persistent configuration
+# =============================================================================
+"""
+Simple JSON-backed configuration manager for the dashboard.
+
+Provides read/write access to persistent settings stored in config.json.
+"""
+
 import json
 import os
 from typing import Any, Dict, Optional
+
 from backend.paths import BASE_DIR
+
+
+# =============================================================================
+# CONFIG MANAGER CLASS
+# =============================================================================
 
 
 class ConfigManager:
@@ -15,6 +30,10 @@ class ConfigManager:
         self.config_path = config_path or os.path.join(BASE_DIR, "data", "config.json")
         self._config: Dict[str, Any] = {}
         self.load_config()
+
+    # -------------------------------------------------------------------------
+    # Config Loading
+    # -------------------------------------------------------------------------
 
     def load_config(self) -> None:
         """Load configuration from file or create defaults if missing/broken."""
@@ -31,7 +50,7 @@ class ConfigManager:
             self.save()
 
     def _get_default_config(self) -> Dict[str, Any]:
-        """Get default configuration"""
+        """Get default configuration."""
         return {
             "proxy_count": 0,
             "internal_ip": "127.0.0.1",
@@ -56,6 +75,10 @@ class ConfigManager:
             },
         }
 
+    # -------------------------------------------------------------------------
+    # Getters & Setters
+    # -------------------------------------------------------------------------
+
     def get(self, key: str, default: Any = None) -> Any:
         """Get a configuration value."""
         return self._config.get(key, default)
@@ -70,6 +93,14 @@ class ConfigManager:
         self._config.update(updates)
         self.save()
 
+    def get_all(self) -> Dict[str, Any]:
+        """Get a shallow copy of all configuration values."""
+        return self._config.copy()
+
+    # -------------------------------------------------------------------------
+    # Persistence
+    # -------------------------------------------------------------------------
+
     def save(self) -> None:
         """Write current configuration to disk in JSON format."""
         try:
@@ -79,10 +110,9 @@ class ConfigManager:
         except Exception as e:
             print(f"Error saving config: {e}")
 
-    def get_all(self) -> Dict[str, Any]:
-        """Get a shallow copy of all configuration values."""
-        return self._config.copy()
 
+# =============================================================================
+# GLOBAL INSTANCE
+# =============================================================================
 
-# Global instance
 config_manager = ConfigManager()

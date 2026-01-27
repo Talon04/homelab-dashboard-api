@@ -1,4 +1,8 @@
-"""Helper utilities for the built-in code editor.
+# =============================================================================
+# CODE EDITOR UTILS - File system helpers for embedded code editor
+# =============================================================================
+"""
+Helper utilities for the built-in code editor.
 
 All paths handled here are relative to ``CODE_DIR`` and are validated
 through :func:`_safe_path` so that callers cannot escape the user_code
@@ -7,7 +11,13 @@ directory via ``..`` or absolute paths.
 
 import os
 from typing import Dict, Any, List, Optional
+
 from backend.paths import CODE_DIR
+
+
+# =============================================================================
+# PATH VALIDATION
+# =============================================================================
 
 # Normalize base directory to match normalized joined paths in _safe_path
 ALLOWED_BASE = os.path.normpath(CODE_DIR)
@@ -25,6 +35,11 @@ def _safe_path(rel_path: str) -> str:
     if not joined.startswith(ALLOWED_BASE):
         raise ValueError("Invalid path")
     return joined
+
+
+# =============================================================================
+# DIRECTORY OPERATIONS
+# =============================================================================
 
 
 def list_tree(rel_path: str = "") -> Dict[str, Any]:
@@ -47,6 +62,11 @@ def list_tree(rel_path: str = "") -> Dict[str, Any]:
     except FileNotFoundError:
         pass
     return tree
+
+
+# =============================================================================
+# FILE OPERATIONS
+# =============================================================================
 
 
 def read_file(rel_path: str) -> Dict[str, Any]:
@@ -89,6 +109,11 @@ def delete_path(rel_path: str) -> Dict[str, Any]:
         os.remove(full)
         return {"path": rel_path, "ok": True}
     return {"path": rel_path, "ok": False, "error": "Path not found"}
+
+
+# =============================================================================
+# WIDGET SCAFFOLDING
+# =============================================================================
 
 
 def ensure_scaffold(rel_path: str, widget_type: Optional[str] = None) -> Dict[str, Any]:

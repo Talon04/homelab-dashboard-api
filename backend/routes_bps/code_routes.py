@@ -1,3 +1,6 @@
+# =============================================================================
+# CODE ROUTES - Embedded code editor API endpoints
+# =============================================================================
 """Flask routes backing the embedded code editor UI."""
 
 import sys
@@ -7,7 +10,16 @@ from flask import Blueprint, jsonify, request
 import backend.code_editor_utils as code_editor_utils
 
 
+# =============================================================================
+# BLUEPRINT REGISTRATION
+# =============================================================================
+
 code_bp = Blueprint("code", __name__)
+
+
+# =============================================================================
+# FILE TREE & CONTENT
+# =============================================================================
 
 
 @code_bp.route("/api/code/tree")

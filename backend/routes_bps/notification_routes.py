@@ -1,7 +1,6 @@
-"""Flask routes for the notification system.
+"""API routes for the notification system.
 
-Channels and rules are stored in config.json via config_manager.
-Events are stored in the database.
+Handles events (database-backed) and notification channels/rules (config-backed).
 """
 
 from datetime import datetime
@@ -10,9 +9,8 @@ from flask import Blueprint, jsonify, request
 from backend.models import DatabaseManager, Event, EventDelivery
 from backend.config_manager import config_manager
 
-notification_bp = Blueprint("notification", __name__)
 
-# Shared database manager instance
+notification_bp = Blueprint("notification", __name__)
 _db_manager = None
 
 
@@ -24,42 +22,42 @@ def get_db():
     return _db_manager
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Helper functions for config-based channels/rules
-# ─────────────────────────────────────────────────────────────────────────────
+# =============================================================================
+# Configuration Helpers
+# =============================================================================
 
 
 def _get_notification_config():
-    """Get the notifications module config."""
+    """Get the notifications module configuration."""
     return config_manager.get("modules", {}).get("notifications", {})
 
 
 def _save_notification_config(notif_config):
-    """Save the notifications module config."""
+    """Save the notifications module configuration."""
     modules = config_manager.get("modules", {})
     modules["notifications"] = notif_config
     config_manager.set("modules", modules)
 
 
 def _get_channels():
-    """Get all notification channels from config."""
+    """Get all notification channels."""
     return _get_notification_config().get("channels", [])
 
 
 def _save_channels(channels):
-    """Save notification channels to config."""
+    """Save notification channels."""
     notif_config = _get_notification_config()
     notif_config["channels"] = channels
     _save_notification_config(notif_config)
 
 
 def _get_rules():
-    """Get all notification rules from config."""
+    """Get all delivery rules."""
     return _get_notification_config().get("rules", [])
 
 
 def _save_rules(rules):
-    """Save notification rules to config."""
+    """Save delivery rules."""
     notif_config = _get_notification_config()
     notif_config["rules"] = rules
     _save_notification_config(notif_config)

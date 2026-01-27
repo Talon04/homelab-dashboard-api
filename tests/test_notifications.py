@@ -1,7 +1,24 @@
-"""Test utilities for the notification system.
+"""Test utilities for the event system and monitoring.
 
-This file provides functions to create test events and push them through the
-notification pipeline. Run with: python -m tests.test_notifications
+Provides functions to create test events, modify mock container states,
+and push events through the delivery pipeline.
+
+Usage: python -m tests.test_notifications <command>
+
+Commands:
+  push           - Create and push a test event
+  list           - List recent events
+  channels       - List configured delivery channels
+  rules          - List configured delivery rules
+  sources        - List source severity overrides
+  set-source     - Set severity for a source
+  clear-source   - Clear severity for a source
+  containers     - List mock containers (testing mode only)
+  set-status     - Set container status (testing mode only)
+  crash          - Simulate container crash (testing mode only)
+  recover        - Simulate container recovery (testing mode only)
+  cycle          - Run monitoring cycle (testing mode only)
+  reset          - Reset mock containers to initial state
 """
 
 import sys
@@ -14,6 +31,9 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from backend.models import DatabaseManager, Event, EventDelivery
 from backend.config_manager import config_manager
+from backend import docker_utils
+from backend.docker_utils import is_testing_mode
+from backend.monitoring_service import run_monitoring_cycle, _previous_states
 
 
 def get_db():
@@ -24,23 +44,23 @@ def get_db():
 def create_test_event(
     severity: int = 2,
     source: str = "test",
-    title: str = "Test Notification",
-    message: str = "This is a test notification message.",
+    title: str = "Test Event",
+    message: str = "This is a test event message.",
     object_type: str = None,
     object_id: int = None,
 ):
     """Create a test event in the database.
 
     Args:
-        severity: Severity level (1=Info, 2=Warning, 3=Critical, 4=Emergency, or any int)
-        source: Event source (e.g., 'test', 'monitor', 'docker', 'script')
-        title: Event title
-        message: Event message/description
-        object_type: Optional type of related object ('container', 'vm', etc.)
-        object_id: Optional ID of related object
+        severity: Severity level (1=Info, 2=Warning, 3=Critical, 4=Emergency).
+        source: Event source (test, monitor, docker, script).
+        title: Event title.
+        message: Event message/description.
+        object_type: Optional type of related object (container, vm, etc.).
+        object_id: Optional ID of related object.
 
     Returns:
-        The created Event object
+        The created Event object.
     """
     db = get_db()
     session = db.get_session()
@@ -72,16 +92,16 @@ def create_test_event(
 
 
 def push_to_channels(event_id: int):
-    """Push an event to configured notification channels based on rules.
+    """Push an event to configured delivery channels based on rules.
 
-    This checks the severity rules and creates EventDelivery records for
+    Checks the severity rules and creates EventDelivery records for
     matching channels.
 
     Args:
-        event_id: ID of the event to push
+        event_id: ID of the event to push.
 
     Returns:
-        List of channel names the event was queued for
+        List of channel names the event was queued for.
     """
     db = get_db()
     session = db.get_session()
@@ -155,8 +175,8 @@ def list_events(limit: int = 10, show_all: bool = False):
     """List recent events.
 
     Args:
-        limit: Maximum number of events to show
-        show_all: If True, show acknowledged events too
+        limit: Maximum number of events to show.
+        show_all: If True, show acknowledged events too.
     """
     db = get_db()
     session = db.get_session()
@@ -287,9 +307,149 @@ def clear_source_severity(source: str):
         print(f"ℹ️  No severity override found for source '{source}'")
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Mock Container Testing Functions
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def list_mock_containers():
+    """List all mock containers with their status."""
+    if not is_testing_mode():
+        print("⚠️  Not in testing mode. Set TESTING_MODE=1 to use mock containers.")
+        return
+
+    containers = docker_utils.get_mock_containers()
+
+    if not containers:
+        print("No mock containers found.")
+        return
+
+    print(f"\n{'ID':<25} | {'Name':<20} | {'Status':<10}")
+    print("-" * 60)
+
+    for cid, c in containers.items():
+        status_icon = "🟢" if c["status"] == "running" else "🔴"
+        print(f"{cid:<25} | {c['name']:<20} | {status_icon} {c['status']}")
+
+
+def set_container_status(container_id: str, status: str):
+    """Set the status of a mock container.
+
+    Args:
+        container_id: Container ID to modify.
+        status: New status (running, exited, stopped, paused, dead).
+    """
+    if not is_testing_mode():
+        print("⚠️  Not in testing mode. Set TESTING_MODE=1 to use mock containers.")
+        return
+
+    valid_statuses = [
+        "running",
+        "exited",
+        "stopped",
+        "paused",
+        "dead",
+        "restarting",
+        "created",
+    ]
+    if status not in valid_statuses:
+        print(f"❌ Invalid status. Must be one of: {', '.join(valid_statuses)}")
+        return
+
+    success = docker_utils.set_mock_container_status(container_id, status)
+
+    if success:
+        print(f"✅ Container '{container_id}' status set to '{status}'")
+    else:
+        print(f"❌ Container '{container_id}' not found")
+
+
+def simulate_crash(container_id: str = None):
+    """Simulate a container crash and trigger monitoring.
+
+    Args:
+        container_id: Optional container ID. If not specified, uses first running container.
+    """
+    if not is_testing_mode():
+        print("⚠️  Not in testing mode. Set TESTING_MODE=1 to use mock containers.")
+        return
+
+    # Find a running container if none specified
+    if not container_id:
+        containers = docker_utils.get_mock_containers()
+        for cid, c in containers.items():
+            if c["status"] == "running":
+                container_id = cid
+                break
+
+    if not container_id:
+        print("❌ No running container found to crash")
+        return
+
+    print(f"💥 Crashing container '{container_id}'...")
+    docker_utils.set_mock_container_status(container_id, "exited")
+
+    print("🔄 Running monitoring cycle...")
+    run_monitoring_cycle()
+
+    print(f"✅ Container '{container_id}' crashed. Check events for 'offline' event.")
+
+
+def simulate_recover(container_id: str = None):
+    """Simulate a container recovery and trigger monitoring.
+
+    Args:
+        container_id: Optional container ID. If not specified, uses first stopped container.
+    """
+    if not is_testing_mode():
+        print("⚠️  Not in testing mode. Set TESTING_MODE=1 to use mock containers.")
+        return
+
+    # Find a stopped container if none specified
+    if not container_id:
+        containers = docker_utils.get_mock_containers()
+        for cid, c in containers.items():
+            if c["status"] != "running":
+                container_id = cid
+                break
+
+    if not container_id:
+        print("❌ No stopped container found to recover")
+        return
+
+    print(f"🔄 Recovering container '{container_id}'...")
+    docker_utils.set_mock_container_status(container_id, "running")
+
+    print("🔄 Running monitoring cycle...")
+    run_monitoring_cycle()
+
+    print(f"✅ Container '{container_id}' recovered. Check events for 'online' event.")
+
+
+def run_cycle():
+    """Manually run a monitoring cycle."""
+    print("🔄 Running monitoring cycle...")
+    run_monitoring_cycle()
+    print(f"✅ Monitoring cycle complete. Tracked states: {dict(_previous_states)}")
+
+
+def reset_mock():
+    """Reset mock containers to initial state."""
+    if not is_testing_mode():
+        print("⚠️  Not in testing mode. Set TESTING_MODE=1 to use mock containers.")
+        return
+
+    docker_utils.reset_mock_containers()
+    _previous_states.clear()
+    print("✅ Mock containers reset to initial state")
+    list_mock_containers()
+
+
 def main():
     """CLI entry point."""
-    parser = argparse.ArgumentParser(description="Notification system test utilities")
+    parser = argparse.ArgumentParser(
+        description="Event system and monitoring test utilities"
+    )
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
 
     # push command
@@ -300,11 +460,9 @@ def main():
     push_parser.add_argument(
         "--source", default="test", help="Event source (default: test)"
     )
+    push_parser.add_argument("-t", "--title", default="Test Event", help="Event title")
     push_parser.add_argument(
-        "-t", "--title", default="Test Notification", help="Event title"
-    )
-    push_parser.add_argument(
-        "-m", "--message", default="This is a test notification.", help="Event message"
+        "-m", "--message", default="This is a test event.", help="Event message"
     )
 
     # list command
@@ -338,6 +496,60 @@ def main():
     )
     clear_source_parser.add_argument("source", help="Source name")
 
+    # ─────────────────────────────────────────────────────────────────────────
+    # Mock Container / Monitoring Commands
+    # ─────────────────────────────────────────────────────────────────────────
+
+    # containers command
+    subparsers.add_parser("containers", help="List mock containers (mock mode only)")
+
+    # set-status command
+    status_parser = subparsers.add_parser(
+        "set-status", help="Set container status (mock mode only)"
+    )
+    status_parser.add_argument("container_id", help="Container ID")
+    status_parser.add_argument(
+        "status",
+        choices=[
+            "running",
+            "exited",
+            "stopped",
+            "paused",
+            "dead",
+            "restarting",
+            "created",
+        ],
+        help="New status",
+    )
+
+    # crash command
+    crash_parser = subparsers.add_parser(
+        "crash", help="Simulate container crash (mock mode only)"
+    )
+    crash_parser.add_argument(
+        "container_id",
+        nargs="?",
+        default=None,
+        help="Container ID (optional, uses first running if not specified)",
+    )
+
+    # recover command
+    recover_parser = subparsers.add_parser(
+        "recover", help="Simulate container recovery (mock mode only)"
+    )
+    recover_parser.add_argument(
+        "container_id",
+        nargs="?",
+        default=None,
+        help="Container ID (optional, uses first stopped if not specified)",
+    )
+
+    # cycle command
+    subparsers.add_parser("cycle", help="Run monitoring cycle")
+
+    # reset command
+    subparsers.add_parser("reset", help="Reset mock containers to initial state")
+
     args = parser.parse_args()
 
     if args.command == "push":
@@ -361,6 +573,18 @@ def main():
         set_source_severity(args.source, args.severity)
     elif args.command == "clear-source":
         clear_source_severity(args.source)
+    elif args.command == "containers":
+        list_mock_containers()
+    elif args.command == "set-status":
+        set_container_status(args.container_id, args.status)
+    elif args.command == "crash":
+        simulate_crash(args.container_id)
+    elif args.command == "recover":
+        simulate_recover(args.container_id)
+    elif args.command == "cycle":
+        run_cycle()
+    elif args.command == "reset":
+        reset_mock()
     else:
         parser.print_help()
 

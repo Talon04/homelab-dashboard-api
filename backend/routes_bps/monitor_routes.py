@@ -1,9 +1,23 @@
+# =============================================================================
+# MONITOR ROUTES - Container monitoring API endpoints
+# =============================================================================
+"""Flask routes for container and VM monitoring configuration."""
+
 from flask import Blueprint, jsonify, request
 
 from backend.save_manager import get_save_manager
 
 
+# =============================================================================
+# BLUEPRINT REGISTRATION
+# =============================================================================
+
 monitor_bp = Blueprint("monitor", __name__)
+
+
+# =============================================================================
+# CONTAINER MONITORING
+# =============================================================================
 
 
 @monitor_bp.route("/api/monitor/container/<container_id>")
@@ -31,7 +45,7 @@ def api_set_container_monitor(container_id):
     # Debug: log raw request info
     print(f"DEBUG monitor POST: content_type={request.content_type}")
     print(f"DEBUG monitor POST: raw data={request.data}")
-    
+
     data = request.get_json(silent=True, force=True)
     print(f"DEBUG monitor POST: parsed json={data}, type={type(data)}")
 
@@ -43,8 +57,12 @@ def api_set_container_monitor(container_id):
         return jsonify({"error": "Missing enabled"}), 400
 
     enabled = bool(data["enabled"])
+    event_severity_settings = data.get("event_severity_settings")
+
     sm = get_save_manager()
-    result = sm.set_monitor_for_container(container_id, enabled)
+    result = sm.set_monitor_for_container(
+        container_id, enabled, event_severity_settings=event_severity_settings
+    )
     if result is None:
         return jsonify({"error": "Failed to update monitor state"}), 400
     return jsonify(result)

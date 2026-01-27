@@ -1,77 +1,59 @@
-<!DOCTYPE html>
-<html>
+{% extends "_base.html" %}
 
-<head>
-  <title>Homelab Dashboard - Code Editor</title>
-  <script src="https://cdn.tailwindcss.com"></script>
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.css" />
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/theme/neo.min.css" />
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/javascript/javascript.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/python/python.min.js"></script>
-  <script src="/static/nav.js" defer></script>
-  <script>
+{% block title %}Homelab Dashboard - Code Editor{% endblock %}
+
+{% block head_extra %}
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.css" />
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/theme/neo.min.css" />
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/javascript/javascript.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/python/python.min.js"></script>
+<script>
     document.addEventListener('DOMContentLoaded', async () => {
-      try {
-        const res = await fetch('/api/config/modules');
-        if (res.ok) {
-          const data = await res.json();
-          const enabled = Array.isArray(data.modules) ? data.modules : [];
-          if (!enabled.includes('code_editor')) {
-            window.location.href = '/settings';
-          }
-        }
-      } catch (e) { }
+        try {
+            const res = await fetch('/api/config/modules');
+            if (res.ok) {
+                const data = await res.json();
+                const enabled = Array.isArray(data.modules) ? data.modules : [];
+                if (!enabled.includes('code_editor')) {
+                    window.location.href = '/settings';
+                }
+            }
+        } catch (e) { }
     });
-  </script>
-  <script src="/static/code_editor.js" defer></script>
-</head>
+</script>
+{% endblock %}
 
-<body class="bg-gray-100">
-  <div class="container mx-auto p-4">
-    <div class="grid grid-cols-3 items-center mb-4">
-      <div class="justify-self-start flex items-center gap-2">
-        <a id="nav-left-arrow" href="/settings" class="text-blue-600 hover:text-blue-800">◀</a>
-        <a id="nav-left-link" href="/settings" class="text-sm text-gray-700 hover:text-blue-700">Settings</a>
-      </div>
-      <div class="justify-self-center">
-        <h1 class="text-2xl font-bold text-center">Homelab Dashboard</h1>
-      </div>
-      <div class="justify-self-end flex items-center gap-2">
-        <a id="nav-right-link" href="/settings" class="text-sm text-gray-700 hover:text-blue-700">Settings</a>
-        <a id="nav-right-arrow" href="/settings" class="text-blue-600 hover:text-blue-800">▶</a>
-      </div>
-    </div>
-
-    <div class="grid grid-cols-12 gap-4">
-      <div class="col-span-3 bg-white rounded shadow p-3">
+{% block content %}
+<div class="grid grid-cols-12 gap-4">
+    <div class="col-span-3 bg-white rounded shadow p-3">
         <div class="flex justify-between items-center mb-2">
-          <h2 class="font-semibold">Files</h2>
-          <button id="new-file" class="px-2 py-1 text-sm bg-blue-500 text-white rounded">New</button>
+            <h2 class="font-semibold">Files</h2>
+            <button id="new-file" class="px-2 py-1 text-sm bg-blue-500 text-white rounded">New</button>
         </div>
         <div id="file-tree" class="text-sm"></div>
-      </div>
-      <div class="col-span-6 bg-white rounded shadow p-3">
+    </div>
+    <div class="col-span-6 bg-white rounded shadow p-3">
         <div class="flex justify-between items-center mb-2">
-          <div class="font-semibold" id="editor-path">No file selected</div>
-          <div class="space-x-2">
-            <button id="save-file" class="px-2 py-1 text-sm bg-green-500 text-white rounded">Save</button>
-            <button id="run-file" class="px-2 py-1 text-sm bg-gray-700 text-white rounded">Run</button>
-            <button id="delete-file" class="px-2 py-1 text-sm bg-red-500 text-white rounded">Delete</button>
-          </div>
+            <div class="font-semibold" id="editor-path">No file selected</div>
+            <div class="space-x-2">
+                <button id="save-file" class="px-2 py-1 text-sm bg-green-500 text-white rounded">Save</button>
+                <button id="run-file" class="px-2 py-1 text-sm bg-gray-700 text-white rounded">Run</button>
+                <button id="delete-file" class="px-2 py-1 text-sm bg-red-500 text-white rounded">Delete</button>
+            </div>
         </div>
         <textarea id="editor" class="w-full h-[60vh] p-2 border border-gray-300 rounded font-mono text-sm"></textarea>
-      </div>
-      <div class="col-span-3 bg-white rounded shadow p-3">
+    </div>
+    <div class="col-span-3 bg-white rounded shadow p-3">
         <div class="flex justify-between items-center mb-2">
-          <h2 class="font-semibold">Console</h2>
-          <button id="clear-console" class="px-2 py-1 text-sm bg-gray-200 rounded">Clear</button>
+            <h2 class="font-semibold">Console</h2>
+            <button id="clear-console" class="px-2 py-1 text-sm bg-gray-200 rounded">Clear</button>
         </div>
         <pre id="console" class="h-[60vh] overflow-auto bg-black text-green-200 p-2 text-xs rounded"></pre>
-      </div>
     </div>
-  </div>
-  <script src="/static/notifications.js" defer></script>
-</body>
+</div>
+{% endblock %}
 
-</html>
+{% block scripts %}
+<script src="/static/code_editor.js" defer></script>
+{% endblock %}

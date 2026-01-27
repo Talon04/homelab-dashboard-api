@@ -1,9 +1,23 @@
+# =============================================================================
+# PAGES ROUTES - HTML page rendering endpoints
+# =============================================================================
+"""Flask routes for rendering HTML pages via Jinja2 templates."""
+
 from flask import Blueprint, render_template
 
 import backend.config_utils as config_utils
 
 
+# =============================================================================
+# BLUEPRINT REGISTRATION
+# =============================================================================
+
 pages_bp = Blueprint("pages", __name__)
+
+
+# =============================================================================
+# PAGE ROUTES
+# =============================================================================
 
 
 @pages_bp.route("/")

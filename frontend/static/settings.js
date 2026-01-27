@@ -1,3 +1,16 @@
+/**
+ * =============================================================================
+ * SETTINGS.JS - Settings page logic
+ * =============================================================================
+ * 
+ * Handles the settings/configuration page, including IP addresses,
+ * proxy configuration, module management and first-boot setup flow.
+ */
+
+// =============================================================================
+// GLOBAL STATE
+// =============================================================================
+
 let currentSettings = {};
 
 window.addEventListener("DOMContentLoaded", async () => {
@@ -222,7 +235,8 @@ async function loadModulesUI() {
         node: { label: 'Node (optional)', type: 'text', placeholder: 'pve' }
       }
     },
-    { id: 'code_editor', label: 'Code Editor' }
+    { id: 'code_editor', label: 'Code Editor' },
+    { id: 'notifications', label: 'Notifications' }
   ];
   let enabled = ["containers"];
   let order = ["containers"];

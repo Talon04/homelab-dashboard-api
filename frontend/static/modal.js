@@ -1,4 +1,16 @@
-// Modal utility functions for better UX
+/**
+ * =============================================================================
+ * MODAL.JS - Modal dialog utility
+ * =============================================================================
+ * 
+ * Provides a reusable ModalManager class for displaying confirmation dialogs,
+ * input prompts and alert messages throughout the application.
+ */
+
+// =============================================================================
+// MODAL MANAGER CLASS
+// =============================================================================
+
 class ModalManager {
   constructor() {
     this.activeModal = null;
@@ -17,7 +29,7 @@ class ModalManager {
 
   showModal(config) {
     const container = document.getElementById('modal-container');
-    
+
     const modal = document.createElement('div');
     modal.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4';
     modal.onclick = (e) => {
@@ -28,22 +40,22 @@ class ModalManager {
 
     const dialog = document.createElement('div');
     dialog.className = 'bg-white rounded-lg shadow-xl max-w-md w-full mx-4';
-    
+
     // Header
     if (config.title) {
       const header = document.createElement('div');
       header.className = 'flex items-center justify-between p-6 pb-3';
-      
+
       const title = document.createElement('h3');
       title.className = 'text-lg font-semibold text-gray-900';
       title.textContent = config.title;
-      
+
       const closeBtn = document.createElement('button');
       closeBtn.className = 'text-gray-400 hover:text-gray-600 focus:outline-none';
       closeBtn.innerHTML = '×';
       closeBtn.style.fontSize = '24px';
       closeBtn.onclick = () => this.closeModal();
-      
+
       header.appendChild(title);
       header.appendChild(closeBtn);
       dialog.appendChild(header);
@@ -52,7 +64,7 @@ class ModalManager {
     // Body
     const body = document.createElement('div');
     body.className = 'px-6 py-3';
-    
+
     if (config.message) {
       const message = document.createElement('p');
       message.className = 'text-gray-600 mb-4';
@@ -63,27 +75,27 @@ class ModalManager {
     if (config.input) {
       const inputGroup = document.createElement('div');
       inputGroup.className = 'mb-4';
-      
+
       if (config.input.label) {
         const label = document.createElement('label');
         label.className = 'block text-sm font-medium text-gray-700 mb-2';
         label.textContent = config.input.label;
         inputGroup.appendChild(label);
       }
-      
+
       const input = document.createElement('input');
       input.type = config.input.type || 'text';
       input.className = 'w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent';
       input.placeholder = config.input.placeholder || '';
       input.value = config.input.value || '';
       input.id = 'modal-input';
-      
+
       // Auto-focus and select all text
       setTimeout(() => {
         input.focus();
         input.select();
       }, 100);
-      
+
       // Handle Enter key
       input.addEventListener('keydown', (e) => {
         if (e.key === 'Enter') {
@@ -94,10 +106,10 @@ class ModalManager {
           this.closeModal();
         }
       });
-      
+
       inputGroup.appendChild(input);
       body.appendChild(inputGroup);
-      
+
       // Validation message area
       const validationMsg = document.createElement('div');
       validationMsg.id = 'validation-message';
@@ -110,7 +122,7 @@ class ModalManager {
     // Footer
     const footer = document.createElement('div');
     footer.className = 'flex justify-end gap-3 px-6 py-4 bg-gray-50 rounded-b-lg';
-    
+
     // Cancel button
     const cancelBtn = document.createElement('button');
     cancelBtn.className = 'px-4 py-2 text-gray-600 hover:text-gray-800 focus:outline-none';
@@ -120,7 +132,7 @@ class ModalManager {
       if (config.onCancel) config.onCancel();
     };
     footer.appendChild(cancelBtn);
-    
+
     // Confirm button
     const confirmBtn = document.createElement('button');
     confirmBtn.className = 'px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500';
@@ -129,7 +141,7 @@ class ModalManager {
     confirmBtn.onclick = () => {
       if (config.input) {
         const inputValue = document.getElementById('modal-input').value;
-        
+
         // Validation
         if (config.input.validate && !config.input.validate(inputValue)) {
           const validationMsg = document.getElementById('validation-message');
@@ -137,7 +149,7 @@ class ModalManager {
           validationMsg.classList.remove('hidden');
           return;
         }
-        
+
         this.closeModal();
         if (config.onConfirm) config.onConfirm(inputValue);
       } else {
@@ -146,15 +158,15 @@ class ModalManager {
       }
     };
     footer.appendChild(confirmBtn);
-    
+
     dialog.appendChild(footer);
     modal.appendChild(dialog);
     container.appendChild(modal);
-    
+
     // Show modal
     container.classList.remove('hidden');
     this.activeModal = modal;
-    
+
     // Prevent body scroll
     document.body.style.overflow = 'hidden';
   }
@@ -231,10 +243,10 @@ class ToastManager {
 
   show(message, type = 'info', duration = 5000) {
     const container = document.getElementById('toast-container');
-    
+
     const toast = document.createElement('div');
     toast.className = `px-4 py-3 rounded-md shadow-lg transform transition-all duration-300 translate-x-full opacity-0`;
-    
+
     // Set colors based on type
     const typeClasses = {
       success: 'bg-green-500 text-white',
@@ -242,17 +254,17 @@ class ToastManager {
       warning: 'bg-yellow-500 text-white',
       info: 'bg-blue-500 text-white'
     };
-    
+
     toast.className += ` ${typeClasses[type] || typeClasses.info}`;
-    
+
     // Toast content
     const content = document.createElement('div');
     content.className = 'flex items-center justify-between gap-3';
-    
+
     const messageEl = document.createElement('span');
     messageEl.textContent = message;
     content.appendChild(messageEl);
-    
+
     // Close button
     const closeBtn = document.createElement('button');
     closeBtn.className = 'text-white hover:text-gray-200 focus:outline-none';
@@ -260,22 +272,22 @@ class ToastManager {
     closeBtn.style.fontSize = '18px';
     closeBtn.onclick = () => this.remove(toast);
     content.appendChild(closeBtn);
-    
+
     toast.appendChild(content);
     container.appendChild(toast);
-    
+
     // Animate in
     setTimeout(() => {
       toast.classList.remove('translate-x-full', 'opacity-0');
     }, 100);
-    
+
     // Auto remove
     if (duration > 0) {
       setTimeout(() => {
         this.remove(toast);
       }, duration);
     }
-    
+
     return toast;
   }
 

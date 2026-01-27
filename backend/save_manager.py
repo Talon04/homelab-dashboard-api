@@ -1,4 +1,16 @@
+# =============================================================================
+# SAVE MANAGER - Database persistence layer
+# =============================================================================
+"""
+Database persistence manager for the dashboard backend.
+
+This module provides a SQLite-backed data layer via SQLAlchemy for storing
+container metadata, widgets, monitor configurations and VM information.
+Configuration (JSON) is handled separately by ConfigManager.
+"""
+
 import os
+import json
 from typing import Any, Dict, List, Optional
 from contextlib import contextmanager
 
@@ -27,6 +39,11 @@ except ImportError:
     Session = None
 
 
+# =============================================================================
+# SAVE MANAGER CLASS
+# =============================================================================
+
+
 class SaveManager:
     """Data persistence manager (SQLite only). Config JSON is handled elsewhere."""
 
@@ -44,9 +61,13 @@ class SaveManager:
             except Exception as e:
                 print(f"Warning: Could not initialize database: {e}")
 
+    # -------------------------------------------------------------------------
+    # Session Management
+    # -------------------------------------------------------------------------
+
     @contextmanager
     def get_db_session(self):
-        """Context manager for database sessions"""
+        """Context manager for database sessions."""
         if self.db_manager is None:
             yield None
             return
@@ -61,9 +82,10 @@ class SaveManager:
         finally:
             self.db_manager.close_session(session)
 
-    # No configuration (JSON) methods here. Use ConfigManager for config.
+    # -------------------------------------------------------------------------
+    # Container Lookup Helpers
+    # -------------------------------------------------------------------------
 
-    # Container data methods (Database-based)
     def _get_container_row_by_docker_id(self, session, docker_id: str):
         """Return the Container row for a given Docker ID, or None."""
         if not docker_id or Container is None:
@@ -73,6 +95,10 @@ class SaveManager:
             .filter(Container.docker_id == str(docker_id))
             .first()
         )
+
+    # -------------------------------------------------------------------------
+    # Container CRUD
+    # -------------------------------------------------------------------------
 
     def get_container(self, container_id: str) -> Optional[Dict]:
         """Get container data by Docker ID.
@@ -158,6 +184,10 @@ class SaveManager:
                 container = Container(**full_container_data)
                 session.add(container)
 
+    # -------------------------------------------------------------------------
+    # Container Ports & Link Bodies
+    # -------------------------------------------------------------------------
+
     def get_preferred_port(self, container_id: str) -> Optional[str]:
         """Get preferred port for a container"""
         container = self.get_container(container_id)
@@ -188,6 +218,10 @@ class SaveManager:
     def set_external_link_body(self, container_id: str, link_body: str):
         """Set external link body for a container"""
         self.save_container({"id": container_id, "external_link_body": link_body})
+
+    # -------------------------------------------------------------------------
+    # Exposed Containers
+    # -------------------------------------------------------------------------
 
     def get_exposed_containers(self) -> List[str]:
         """Get all exposed containers as a list of IDs"""
@@ -258,6 +292,10 @@ class SaveManager:
                 )
                 session.add(container)
 
+    # -------------------------------------------------------------------------
+    # Container Listing
+    # -------------------------------------------------------------------------
+
     def get_all_containers(self) -> List[Dict]:
         """Get all containers"""
         if self.db_manager is None:
@@ -309,6 +347,10 @@ class SaveManager:
                 }
                 for container in containers
             ]
+
+    # -------------------------------------------------------------------------
+    # VM Listing
+    # -------------------------------------------------------------------------
 
     def get_all_vms(self) -> List[Dict]:
         """Get all VMs"""
@@ -399,7 +441,10 @@ class SaveManager:
                 for container in containers
             ]
 
-    # Widgets CRUD
+    # -------------------------------------------------------------------------
+    # Widget CRUD
+    # -------------------------------------------------------------------------
+
     def get_widgets(self, container_id: str) -> List[Dict]:
         """Return all widgets attached to a specific container.
 
@@ -581,7 +626,10 @@ class SaveManager:
             session.delete(w)
             return True
 
-    # Monitor data helpers
+    # -------------------------------------------------------------------------
+    # Monitor Configuration
+    # -------------------------------------------------------------------------
+
     def get_monitor_for_container(self, container_id: str) -> Optional[Dict[str, Any]]:
         """Return monitor configuration for a given container, if any."""
         if self.db_manager is None or MonitorBodies is None:
@@ -602,13 +650,21 @@ class SaveManager:
             )
             if not md:
                 return None
+            # Parse event_severity_settings from JSON if present
+            event_severity_settings = None
+            if md.event_severity_settings:
+                try:
+                    event_severity_settings = json.loads(md.event_severity_settings)
+                except Exception:
+                    pass
             return {
                 "id": md.id,
+                "name": md.name,
                 "container_id": md.container_id,
                 "vm_id": md.vm_id,
                 "monitor_type": md.monitor_type,
-                "notification_type": md.notification_type,
                 "enabled": bool(md.enabled),
+                "event_severity_settings": event_severity_settings,
             }
 
     def set_monitor_for_container(
@@ -616,7 +672,8 @@ class SaveManager:
         container_id: str,
         enabled: bool,
         monitor_type: str = "docker",
-        notification_type: str = "none",
+        name: str = None,
+        event_severity_settings: dict = None,
     ) -> Optional[Dict[str, Any]]:
         """Create or update monitor configuration for a container.
 
@@ -651,9 +708,13 @@ class SaveManager:
                     if docker_container:
                         container_name = docker_container.get("name", container_name)
                         container_image = docker_container.get("image", container_image)
-                        container_status = docker_container.get("state", container_status)
+                        container_status = docker_container.get(
+                            "state", container_status
+                        )
                 except Exception as e:
-                    print(f"Warning: Could not get container data for {container_id}: {e}")
+                    print(
+                        f"Warning: Could not get container data for {container_id}: {e}"
+                    )
 
                 cont = Container(
                     docker_id=container_id,
@@ -669,12 +730,18 @@ class SaveManager:
                 .filter(MonitorBodies.container_id == cont.id)
                 .first()
             )
+            # Serialize event_severity_settings to JSON if provided
+            event_severity_settings_json = None
+            if event_severity_settings is not None:
+                event_severity_settings_json = json.dumps(event_severity_settings)
+
             if md is None:
                 md = MonitorBodies(
                     container_id=cont.id,
                     monitor_type=str(monitor_type or "docker"),
-                    notification_type=str(notification_type or "none"),
                     enabled=bool(enabled),
+                    name=name or f"Monitor: {cont.name}",
+                    event_severity_settings=event_severity_settings_json,
                 )
                 session.add(md)
                 session.flush()
@@ -683,16 +750,27 @@ class SaveManager:
                 # Only set defaults if fields are missing
                 if not md.monitor_type:
                     md.monitor_type = str(monitor_type or "docker")
-                if not md.notification_type:
-                    md.notification_type = str(notification_type or "none")
+                if name:
+                    md.name = name
+                if event_severity_settings_json is not None:
+                    md.event_severity_settings = event_severity_settings_json
+
+            # Parse back event_severity_settings for return
+            parsed_settings = None
+            if md.event_severity_settings:
+                try:
+                    parsed_settings = json.loads(md.event_severity_settings)
+                except Exception:
+                    pass
 
             return {
                 "id": md.id,
+                "name": md.name,
                 "container_id": md.container_id,
                 "vm_id": md.vm_id,
                 "monitor_type": md.monitor_type,
-                "notification_type": md.notification_type,
                 "enabled": bool(md.enabled),
+                "event_severity_settings": parsed_settings,
             }
 
     def get_all_monitor_bodies(self) -> List[Dict[str, Any]]:
@@ -705,19 +783,32 @@ class SaveManager:
                 return []
 
             entries = session.query(MonitorBodies).all()
-            return [
-                {
-                    "id": md.id,
-                    "container_id": md.container_id,
-                    "vm_id": md.vm_id,
-                    "monitor_type": md.monitor_type,
-                    "notification_type": md.notification_type,
-                    "enabled": bool(md.enabled),
-                }
-                for md in entries
-            ]
+            result = []
+            for md in entries:
+                # Parse event_severity_settings from JSON
+                event_severity_settings = None
+                if md.event_severity_settings:
+                    try:
+                        event_severity_settings = json.loads(md.event_severity_settings)
+                    except Exception:
+                        pass
+                result.append(
+                    {
+                        "id": md.id,
+                        "name": md.name,
+                        "container_id": md.container_id,
+                        "vm_id": md.vm_id,
+                        "monitor_type": md.monitor_type,
+                        "enabled": bool(md.enabled),
+                        "event_severity_settings": event_severity_settings,
+                    }
+                )
+            return result
 
-    # VM methods (for future use)
+    # -------------------------------------------------------------------------
+    # VM CRUD
+    # -------------------------------------------------------------------------
+
     def _get_vm_row_by_proxmox_id(self, session, proxmox_id: str):
         """Return the VM row for a given Proxmox ID, or None."""
         if not proxmox_id or VM is None:
@@ -789,12 +880,15 @@ class SaveManager:
                 session.add(vm)
 
 
-# Global instance
+# =============================================================================
+# GLOBAL INSTANCE
+# =============================================================================
+
 _save_manager = None
 
 
 def get_save_manager() -> SaveManager:
-    """Get the global SaveManager instance"""
+    """Get the global SaveManager instance."""
     global _save_manager
     if _save_manager is None:
         _save_manager = SaveManager()

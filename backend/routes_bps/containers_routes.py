@@ -1,17 +1,29 @@
-import time
-
+# =============================================================================
+# CONTAINERS ROUTES - Container and widget API endpoints
+# =============================================================================
 """API routes for containers, VMs and container widgets."""
+
+import time
 
 from flask import Blueprint, jsonify, request, current_app
 
 import backend.config_utils as config_utils
 import backend.docker_utils as docker_utils
-import backend.code_editor_utils as code_editor_utils 
+import backend.code_editor_utils as code_editor_utils
 from backend.save_manager import get_save_manager
 from backend.routes_bps.code_routes import api_code_run
 
 
+# =============================================================================
+# BLUEPRINT REGISTRATION
+# =============================================================================
+
 containers_bp = Blueprint("containers", __name__)
+
+
+# =============================================================================
+# HELPER FUNCTIONS
+# =============================================================================
 
 
 def _generate_widget_script_path(container_id: str, widget_type: str) -> str:
@@ -45,6 +57,11 @@ def _generate_widget_script_path(container_id: str, widget_type: str) -> str:
     return f"widgets/{safe}/{filename}"
 
 
+# =============================================================================
+# CONTAINER & VM LISTING
+# =============================================================================
+
+
 @containers_bp.route("/api/containers")
 @containers_bp.route("/api/data/containers")
 def list_containers():
@@ -60,7 +77,11 @@ def list_vms():
     return jsonify(sm.get_all_vms())
 
 
-# Widgets APIs for containers
+# =============================================================================
+# WIDGET CRUD
+# =============================================================================
+
+
 @containers_bp.route("/api/containers/<container_id>/widgets")
 def get_container_widgets(container_id):
     """Return all widgets configured for a single container."""
@@ -172,6 +193,11 @@ def run_container_widget(container_id, widget_id):
         return jsonify({"message": "Client-run JS", "context": context, "path": path})
 
 
+# =============================================================================
+# CONTAINER PORTS & LINKS
+# =============================================================================
+
+
 @containers_bp.route("/api/containers/ports/<container_id>")
 @containers_bp.route("/api/data/containers/ports/<container_id>")
 def container_ports(container_id):
@@ -274,6 +300,11 @@ def set_external_link_body():
 
     config_utils.set_external_link_body(container_id, link_body)
     return jsonify({"message": "External Link Body saved"}), 200
+
+
+# =============================================================================
+# EXPOSED CONTAINERS
+# =============================================================================
 
 
 @containers_bp.route("/api/config/exposed_containers")

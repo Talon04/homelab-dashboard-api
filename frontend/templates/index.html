@@ -1,31 +1,15 @@
-<!DOCTYPE html>
-<html>
+{% extends "_base.html" %}
 
-<head>
-  <title>Homelab Dashboard - Containers</title>
-  <script src="/static/modal.js" defer></script>
-  <script src="/static/dashboard.js" defer></script>
-  <script src="/static/notifications.js" defer></script>
-  <script src="https://cdn.tailwindcss.com"></script>
-</head>
+{% block title %}Homelab Dashboard - Containers{% endblock %}
 
-<body class="bg-gray-100">
-  <div class="container mx-auto p-4">
-    <div class="grid grid-cols-3 items-center mb-6">
-      <div class="justify-self-start flex items-center gap-2">
-        <a href="/settings" class="text-blue-600 hover:text-blue-800">◀</a>
-        <a href="/settings" class="text-sm text-gray-700 hover:text-blue-700">Settings</a>
-      </div>
-      <div class="justify-self-center">
-        <h1 class="text-2xl font-bold text-center">Homelab Dashboard</h1>
-      </div>
-      <div class="justify-self-end flex items-center gap-2">
-        <a href="/settings" class="text-sm text-gray-700 hover:text-blue-700">Settings</a>
-        <a href="/settings" class="text-blue-600 hover:text-blue-800">▶</a>
-      </div>
-    </div>
-    <div id="container-list"></div>
-  </div>
-</body>
+{% block head_extra %}
+<script src="/static/modal.js" defer></script>
+{% endblock %}
 
-</html>
+{% block content %}
+<div id="container-list"></div>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/dashboard.js" defer></script>
+{% endblock %}

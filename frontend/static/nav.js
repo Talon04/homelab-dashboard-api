@@ -1,3 +1,12 @@
+/**
+ * =============================================================================
+ * NAV.JS - Dynamic navigation arrows
+ * =============================================================================
+ * 
+ * Manages navigation arrows based on enabled modules and their display order.
+ * Provides circular navigation between pages.
+ */
+
 // nav.js - dynamic navigation arrows based on enabled modules and order
 (function () {
   function $(id) { return document.getElementById(id); }

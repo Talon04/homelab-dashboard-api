@@ -12,8 +12,9 @@ A self-hosted control panel to monitor and manage Docker containers and service 
 - Docker SDK
 - HTML + JS frontend
 - Deployed via Docker
-## .env Variables:
-- DONT_USE_DOCKER: Mainly for testing, uses mock containers instead  of live Docker
+## Environment Variables
+
+- `TESTING_MODE`: Set to `1` to use mock containers instead of live Docker (for development/testing)
 
 ## 🔧 Local Setup
 

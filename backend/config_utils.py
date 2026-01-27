@@ -1,4 +1,8 @@
-"""High-level configuration helpers built on top of ConfigManager.
+# =============================================================================
+# CONFIG UTILS - High-level configuration helpers
+# =============================================================================
+"""
+High-level configuration helpers built on top of ConfigManager.
 
 This module bridges JSON configuration, Docker inspection and the
 database-backed SaveManager. It provides convenience functions for
@@ -8,11 +12,22 @@ configuration.
 
 import json
 import os
+
 import backend.docker_utils as docker_utils
 from backend.save_manager import get_save_manager
 from backend.config_manager import config_manager
 
+
+# =============================================================================
+# CONSTANTS
+# =============================================================================
+
 default_ip = "127.0.0.1"
+
+
+# =============================================================================
+# PORT CONFIGURATION
+# =============================================================================
 
 
 def guess_preferred_port(container_id):
@@ -48,24 +63,6 @@ def tryGeneratePreferredPorts():
     return preferred_ports
 
 
-def tryGenerateInternalLinkBodies():
-    """Generate basic internal link bodies for all known containers."""
-
-    containers = docker_utils.list_containers()
-    link_bodies = {}
-    for container in containers:
-        container_id = container.get("id")
-        networks = container.get("NetworkSettings", {}).get("Networks", {})
-        if "mclan" in networks:
-            # Example: mclan network
-            ip = networks["mclan"].get("IPAddress", "unknown")
-            link_body = "http://{ip}"
-        else:
-            link_body = "http://{default_ip}"
-        link_bodies[container_id] = link_body
-    return link_bodies
-
-
 def get_preferred_port(container_id):
     """Return the preferred host port for a container, guessing if needed."""
 
@@ -84,6 +81,29 @@ def set_preferred_port(container_id, port):
     save_manager = get_save_manager()
     save_manager.set_preferred_port(container_id, port)
     print(f"Preferred port for {container_id} set to {port}")
+
+
+# =============================================================================
+# LINK BODY CONFIGURATION
+# =============================================================================
+
+
+def tryGenerateInternalLinkBodies():
+    """Generate basic internal link bodies for all known containers."""
+
+    containers = docker_utils.list_containers()
+    link_bodies = {}
+    for container in containers:
+        container_id = container.get("id")
+        networks = container.get("NetworkSettings", {}).get("Networks", {})
+        if "mclan" in networks:
+            # Example: mclan network
+            ip = networks["mclan"].get("IPAddress", "unknown")
+            link_body = "http://{ip}"
+        else:
+            link_body = "http://{default_ip}"
+        link_bodies[container_id] = link_body
+    return link_bodies
 
 
 def get_link_body(container_id):
@@ -149,6 +169,49 @@ def set_exposed_containers(container, exposed):
     print(f"Exposed containers updated for {container}: {exposed}")
 
 
+def _update_link_bodies_with_new_ip(link_bodies_key, old_ip, new_ip):
+    """
+    Helper function to update all link bodies that reference the old IP with the new IP.
+    This handles both exact IP matches and common URL patterns.
+    """
+    save_manager = get_save_manager()
+
+    # Get all containers and update their link bodies
+    containers = save_manager.get_all_containers()
+    updated_count = 0
+
+    for container in containers:
+        container_id = container.get("id")
+        if not container_id:
+            continue
+
+        # Check and update the appropriate link body type
+        if link_bodies_key == "internal_link_bodies":
+            link_body = container.get("internal_link_body")
+            if link_body and old_ip in link_body:
+                updated_link_body = link_body.replace(old_ip, new_ip)
+                save_manager.set_link_body(container_id, updated_link_body)
+                updated_count += 1
+                print(f"Updated {container_id}: {link_body} -> {updated_link_body}")
+        elif link_bodies_key == "external_link_bodies":
+            link_body = container.get("external_link_body")
+            if link_body and old_ip in link_body:
+                updated_link_body = link_body.replace(old_ip, new_ip)
+                save_manager.set_external_link_body(container_id, updated_link_body)
+                updated_count += 1
+                print(f"Updated {container_id}: {link_body} -> {updated_link_body}")
+
+    if updated_count > 0:
+        print(f"Updated {updated_count} containers in {link_bodies_key}")
+    else:
+        print(f"No link bodies needed updating in {link_bodies_key}")
+
+
+# =============================================================================
+# PROXY CONFIGURATION
+# =============================================================================
+
+
 def get_proxy_count():
     """Return how many reverse proxies sit in front of Flask."""
 
@@ -160,6 +223,11 @@ def set_proxy_count(proxy_count):
 
     config_manager.set("proxy_count", int(proxy_count))
     print(f"Proxy count set to {proxy_count}")
+
+
+# =============================================================================
+# IP ADDRESS CONFIGURATION
+# =============================================================================
 
 
 def get_internal_ip():
@@ -206,6 +274,11 @@ def set_external_ip(ip):
         print(f"Updated external link bodies from {old_external_ip} to {ip}")
 
 
+# =============================================================================
+# FIRST BOOT FLAG
+# =============================================================================
+
+
 def get_first_boot():
     """Return True if the app considers this the first boot."""
 
@@ -217,6 +290,11 @@ def set_first_boot(is_first_boot):
 
     config_manager.set("first_boot", bool(is_first_boot))
     print(f"First boot flag set to {is_first_boot}")
+
+
+# =============================================================================
+# MODULE CONFIGURATION
+# =============================================================================
 
 
 def get_enabled_modules():
@@ -265,41 +343,3 @@ def set_module_config(module_id, config_dict):
     modules[module_id] = {**modules.get(module_id, {}), **config_dict}
     config_manager.set("modules", modules)
     print(f"Updated module config for {module_id}")
-
-
-def _update_link_bodies_with_new_ip(link_bodies_key, old_ip, new_ip):
-    """
-    Helper function to update all link bodies that reference the old IP with the new IP.
-    This handles both exact IP matches and common URL patterns.
-    """
-    save_manager = get_save_manager()
-
-    # Get all containers and update their link bodies
-    containers = save_manager.get_all_containers()
-    updated_count = 0
-
-    for container in containers:
-        container_id = container.get("id")
-        if not container_id:
-            continue
-
-        # Check and update the appropriate link body type
-        if link_bodies_key == "internal_link_bodies":
-            link_body = container.get("internal_link_body")
-            if link_body and old_ip in link_body:
-                updated_link_body = link_body.replace(old_ip, new_ip)
-                save_manager.set_link_body(container_id, updated_link_body)
-                updated_count += 1
-                print(f"Updated {container_id}: {link_body} -> {updated_link_body}")
-        elif link_bodies_key == "external_link_bodies":
-            link_body = container.get("external_link_body")
-            if link_body and old_ip in link_body:
-                updated_link_body = link_body.replace(old_ip, new_ip)
-                save_manager.set_external_link_body(container_id, updated_link_body)
-                updated_count += 1
-                print(f"Updated {container_id}: {link_body} -> {updated_link_body}")
-
-    if updated_count > 0:
-        print(f"Updated {updated_count} containers in {link_bodies_key}")
-    else:
-        print(f"No link bodies needed updating in {link_bodies_key}")

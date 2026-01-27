@@ -1,8 +1,21 @@
+/**
+ * =============================================================================
+ * BACKUP.JS - Backup status and SMART monitoring
+ * =============================================================================
+ * 
+ * Provides backup status display and disk SMART statistics monitoring.
+ * Currently uses mock data - to be connected to actual backup API endpoints.
+ */
+
+// =============================================================================
+// INITIALISATION
+// =============================================================================
+
 window.addEventListener("DOMContentLoaded", async () => {
   // Load initial data
   await loadBackupStats();
   await loadSmartStats();
-  
+
   // Event listeners
   document.getElementById("refresh-backup").addEventListener("click", loadBackupStats);
   document.getElementById("refresh-smart").addEventListener("click", loadSmartStats);
@@ -10,7 +23,7 @@ window.addEventListener("DOMContentLoaded", async () => {
 
 async function loadBackupStats() {
   const backupContent = document.getElementById("backup-content");
-  
+
   try {
     // Show loading state
     backupContent.innerHTML = `
@@ -19,11 +32,11 @@ async function loadBackupStats() {
         Loading backup information...
       </div>
     `;
-    
+
     // TODO: Replace with actual backup API endpoint when available
     // For now, simulate backup data
     await new Promise(resolve => setTimeout(resolve, 1000)); // Simulate loading
-    
+
     // Mock backup data - replace with real API call
     const backupData = {
       last_backup: "2024-09-03 14:30:00",
@@ -33,9 +46,9 @@ async function loadBackupStats() {
       backups_count: 15,
       oldest_backup: "2024-08-01 02:00:00"
     };
-    
+
     renderBackupStats(backupData);
-    
+
   } catch (err) {
     console.error("Failed to load backup stats:", err);
     backupContent.innerHTML = `
@@ -49,7 +62,7 @@ async function loadBackupStats() {
 
 async function loadSmartStats() {
   const smartContent = document.getElementById("smart-content");
-  
+
   try {
     // Show loading state
     smartContent.innerHTML = `
@@ -58,11 +71,11 @@ async function loadSmartStats() {
         Loading system information...
       </div>
     `;
-    
+
     // TODO: Replace with actual smartctl API endpoint when available
     // For now, simulate SMART data
     await new Promise(resolve => setTimeout(resolve, 1200)); // Simulate loading
-    
+
     // Mock SMART data - replace with real API call
     const smartData = {
       drives: [
@@ -75,7 +88,7 @@ async function loadSmartStats() {
           total_lbas_written: "15,420,892"
         },
         {
-          device: "/dev/sdb", 
+          device: "/dev/sdb",
           model: "WD Red 4TB WD40EFAX",
           health: "PASSED",
           temperature: "38°C",
@@ -90,9 +103,9 @@ async function loadSmartStats() {
         disk_usage: "45%"
       }
     };
-    
+
     renderSmartStats(smartData);
-    
+
   } catch (err) {
     console.error("Failed to load SMART stats:", err);
     smartContent.innerHTML = `
@@ -106,10 +119,10 @@ async function loadSmartStats() {
 
 function renderBackupStats(data) {
   const backupContent = document.getElementById("backup-content");
-  
+
   const statusColor = data.status === 'healthy' ? 'text-green-600' : 'text-red-600';
   const statusIcon = data.status === 'healthy' ? '✅' : '❌';
-  
+
   backupContent.innerHTML = `
     <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
       <div class="bg-gray-50 rounded-lg p-4">
@@ -145,7 +158,7 @@ function renderBackupStats(data) {
 
 function renderSmartStats(data) {
   const smartContent = document.getElementById("smart-content");
-  
+
   // System overview
   let systemHtml = `
     <div class="mb-6">
@@ -170,18 +183,18 @@ function renderSmartStats(data) {
       </div>
     </div>
   `;
-  
+
   // Drive details
   let drivesHtml = `
     <div>
       <h3 class="text-lg font-medium mb-3">Drive Health</h3>
       <div class="space-y-4">
   `;
-  
+
   data.drives.forEach(drive => {
     const healthColor = drive.health === 'PASSED' ? 'text-green-600' : 'text-red-600';
     const healthIcon = drive.health === 'PASSED' ? '✅' : '❌';
-    
+
     drivesHtml += `
       <div class="border rounded-lg p-4 bg-gray-50">
         <div class="flex items-center justify-between mb-2">
@@ -205,11 +218,11 @@ function renderSmartStats(data) {
       </div>
     `;
   });
-  
+
   drivesHtml += `
       </div>
     </div>
   `;
-  
+
   smartContent.innerHTML = systemHtml + drivesHtml;
 }

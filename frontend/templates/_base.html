@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>{% block title %}Homelab Dashboard{% endblock %}</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    {% block head_extra %}{% endblock %}
+</head>
+
+<body class="bg-gray-100">
+    <div class="container mx-auto p-4">
+        <div class="grid grid-cols-3 items-center mb-6">
+            <div class="justify-self-start flex items-center gap-2">
+                <a id="nav-left-arrow" href="/settings" class="text-blue-600 hover:text-blue-800">◀</a>
+                <a id="nav-left-link" href="/settings" class="text-sm text-gray-700 hover:text-blue-700">Settings</a>
+            </div>
+            <div class="justify-self-center">
+                <h1 class="text-2xl font-bold text-center">Homelab Dashboard</h1>
+            </div>
+            <div class="justify-self-end flex items-center gap-2">
+                {% include '_notifications.html' %}
+                <a id="nav-right-link" href="/settings" class="text-sm text-gray-700 hover:text-blue-700">Settings</a>
+                <a id="nav-right-arrow" href="/settings" class="text-blue-600 hover:text-blue-800">▶</a>
+            </div>
+        </div>
+
+        {% block content %}{% endblock %}
+    </div>
+
+    {% include '_notifications_modals.html' %}
+
+    <script src="/static/nav.js" defer></script>
+    <script src="/static/custom_loader.js" defer></script>
+    <script src="/static/notifications.js" defer></script>
+    {% block scripts %}{% endblock %}
+</body>
+
+</html>

@@ -1,4 +1,11 @@
-"""Database models for homelab dashboard."""
+"""Database models for the homelab dashboard.
+
+Defines SQLAlchemy ORM models for:
+- Containers and VMs (infrastructure)
+- Monitoring configuration
+- Events and delivery tracking
+- Notification channels and rules
+"""
 
 from sqlalchemy import (
     create_engine,
@@ -20,13 +27,18 @@ from backend.paths import DATA_DIR
 Base = declarative_base()
 
 
+# =============================================================================
+# Infrastructure Models
+# =============================================================================
+
+
 class Container(Base):
-    """Model for Docker containers"""
+    """Docker container tracked by the dashboard."""
 
     __tablename__ = "containers"
 
-    id = Column(Integer, primary_key=True, autoincrement=True)  # internal DB ID
-    docker_id = Column(String, unique=True, nullable=False)  # Docker container ID
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    docker_id = Column(String, unique=True, nullable=False)
     name = Column(String, nullable=False)
     image = Column(String, nullable=False)
     status = Column(String, nullable=False)
@@ -37,18 +49,16 @@ class Container(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
-    # Relationship to container ports
     ports = relationship(
         "ContainerPort", back_populates="container", cascade="all, delete-orphan"
     )
-    # Relationship to widgets
     widgets = relationship(
         "ContainerWidget", back_populates="container", cascade="all, delete-orphan"
     )
 
 
 class ContainerPort(Base):
-    """Model for container port mappings"""
+    """Port mapping for a container."""
 
     __tablename__ = "container_ports"
 
@@ -58,19 +68,16 @@ class ContainerPort(Base):
     external_port = Column(Integer, nullable=True)
     protocol = Column(String, default="tcp")
 
-    # Relationship back to container
     container = relationship("Container", back_populates="ports")
 
 
 class VM(Base):
-    """Model for Virtual Machines (future feature)"""
+    """Virtual machine tracked by the dashboard (Proxmox integration)."""
 
     __tablename__ = "vms"
 
-    id = Column(Integer, primary_key=True, autoincrement=True)  # internal DB ID
-    proxmox_id = Column(
-        String, unique=True, nullable=False
-    )  # VM identifier from Proxmox
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    proxmox_id = Column(String, unique=True, nullable=False)
     name = Column(String, nullable=False)
     status = Column(String, nullable=False)
     cpu_cores = Column(Integer, nullable=True)
@@ -86,20 +93,18 @@ class VM(Base):
 
 
 class ContainerWidget(Base):
-    """Widgets attached to a container box in UI"""
+    """Custom widget attached to a container in the UI."""
 
     __tablename__ = "container_widgets"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     container_id = Column(Integer, ForeignKey("containers.id"), nullable=False)
-    type = Column(String, nullable=False)  # 'text' | 'button'
-    size = Column(String, default="md")  # 'sm' | 'md' | 'lg'
-    label = Column(String, nullable=True)  # for buttons
-    text = Column(Text, nullable=True)  # for text widgets
-    file_path = Column(String, nullable=True)  # associated script file under user_code
-    update_interval = Column(
-        Integer, nullable=True
-    )  # seconds between auto-refresh for text widgets (None = no auto-refresh)
+    type = Column(String, nullable=False)  # text | button
+    size = Column(String, default="md")  # sm | md | lg
+    label = Column(String, nullable=True)
+    text = Column(Text, nullable=True)
+    file_path = Column(String, nullable=True)
+    update_interval = Column(Integer, nullable=True)  # seconds, None = no auto-refresh
     sort_order = Column(Integer, default=0)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -107,123 +112,126 @@ class ContainerWidget(Base):
     container = relationship("Container", back_populates="widgets")
 
 
+# =============================================================================
+# Monitoring Models
+# =============================================================================
+
+
 class MonitorBodies(Base):
-    """Model for monitor configuration entries ("monitor_bodies")."""
+    """Monitor configuration entry for a container or VM."""
 
     __tablename__ = "monitor_bodies"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
+    name = Column(String, nullable=False)
     container_id = Column(Integer, ForeignKey("containers.id"), nullable=True)
     vm_id = Column(Integer, ForeignKey("vms.id"), nullable=True)
-    monitor_type = Column(
-        String, nullable=False
-    )  # monitoring types, like 'docker','tcp', 'ping'
-    notification_type = Column(String, nullable=False)  # 'mail', 'push', etc.
+    monitor_type = Column(String, nullable=False)  # container | vm
     enabled = Column(Boolean, default=True)
+    event_severity_settings = Column(Text, nullable=True)  # JSON config
 
 
 class MonitorPoints(Base):
-    """Model for monitoring data points"""
+    """Historical monitoring data point."""
 
     __tablename__ = "monitor_points"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     monitor_data_id = Column(Integer, ForeignKey("monitor_bodies.id"), nullable=False)
     timestamp = Column(DateTime, default=datetime.utcnow)
-    value = Column(String, nullable=False)  # e.g. went offline/online/unknown
+    value = Column(String, nullable=False)  # online | offline | unknown
+
+
+# =============================================================================
+# Event System Models
+# =============================================================================
 
 
 class Event(Base):
+    """System event that can trigger notifications."""
+
     __tablename__ = "events"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     timestamp = Column(DateTime, default=datetime.utcnow)
-
-    severity = Column(Integer, nullable=False)
-    # 1 = info | 2 = warning | 3 = critical etc.. (extendable,higher = more severe)
-
-    source = Column(String, nullable=False)
-    # monitor | script | docker | vm | system
-
+    severity = Column(Integer, nullable=False)  # 1=info, 2=warning, 3=critical, etc.
+    source = Column(String, nullable=False)  # monitor | script | docker | system
     title = Column(String, nullable=False)
     message = Column(Text, nullable=False)
-
-    object_type = Column(String, nullable=True)
-    # "container" | "vm" | "monitor" | "script"
-
+    object_type = Column(String, nullable=True)  # container | vm | monitor | script
     object_id = Column(Integer, nullable=True)
-    # id in its table
-
-    fingerprint = Column(String, nullable=False)
-    # used for deduplication
-
+    fingerprint = Column(String, nullable=False)  # for deduplication
     acknowledged = Column(Boolean, default=False)
     acknowledged_at = Column(DateTime, nullable=True)
 
 
 class EventDelivery(Base):
+    """Tracks delivery of an event to a notification channel."""
+
     __tablename__ = "event_deliveries"
 
     id = Column(Integer, primary_key=True)
     event_id = Column(Integer, ForeignKey("events.id"), nullable=False)
-
     channel_id = Column(Integer, ForeignKey("notification_channels.id"), nullable=False)
-    # discord | push | email | webhook
-
-    status = Column(String, default="pending")
-    # pending | sent | failed
-
+    status = Column(String, default="pending")  # pending | sent | failed
     last_attempt = Column(DateTime)
     error = Column(Text, nullable=True)
 
 
+# =============================================================================
+# Notification Channel Models
+# =============================================================================
+
+
 class NotificationChannel(Base):
-    """Configuration for a notification delivery channel."""
+    """Configuration for a notification delivery channel (Discord, email, etc.)."""
 
     __tablename__ = "notification_channels"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    name = Column(String, nullable=False)  # user-friendly name
-    channel_type = Column(String, nullable=False)
-    # discord | push | email | webhook
-
+    name = Column(String, nullable=False)
+    channel_type = Column(String, nullable=False)  # discord | push | email | webhook
     enabled = Column(Boolean, default=True)
-
-    # Channel-specific config stored as JSON string
-    config = Column(Text, nullable=True)
-    # e.g. {"webhook_url": "..."} for discord
-    # e.g. {"email": "...", "smtp_server": "..."} for email
-
+    config = Column(
+        Text, nullable=True
+    )  # JSON config (webhook_url, smtp settings, etc.)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
 class NotificationRule(Base):
-    """Maps severity levels to notification channels."""
+    """Maps event severity levels to notification channels."""
 
     __tablename__ = "notification_rules"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     channel_id = Column(Integer, ForeignKey("notification_channels.id"), nullable=False)
-    min_severity = Column(Integer, nullable=False)
-    # Events with severity >= min_severity will be sent to this channel
-
+    min_severity = Column(
+        Integer, nullable=False
+    )  # events >= min_severity use this channel
     enabled = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
+# =============================================================================
+# Database Management
+# =============================================================================
+
+
 class DatabaseManager:
-    """Database connection and session management"""
+    """Handles database connection and session management."""
 
     def __init__(self, db_path=None):
-        # If no explicit path is provided, place the DB under the shared
-        # data directory used by the rest of the app.
+        """Initialize the database manager.
+
+        Args:
+            db_path: Optional custom path for the SQLite database.
+                     Defaults to DATA_DIR/data.db.
+        """
         if db_path is None:
             os.makedirs(DATA_DIR, exist_ok=True)
             db_path = os.path.join(DATA_DIR, "data.db")
         else:
-            # Ensure the target directory exists for custom paths as well,
-            # otherwise SQLite raises "unable to open database file".
             abs_path = os.path.abspath(db_path)
             dir_name = os.path.dirname(abs_path)
             if dir_name:
@@ -234,14 +242,13 @@ class DatabaseManager:
         self.engine = create_engine(self.db_url, echo=False)
         self.Session = sessionmaker(bind=self.engine)
 
-        # Create all tables
         Base.metadata.create_all(self.engine)
 
     def get_session(self):
-        """Get a new database session"""
+        """Get a new database session."""
         return self.Session()
 
     def close_session(self, session):
-        """Close a database session"""
+        """Close a database session."""
         if session:
             session.close()

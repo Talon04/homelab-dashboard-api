@@ -1,7 +1,7 @@
-"""Background service for delivering notifications through configured channels.
+"""Event delivery service - sends events through configured notification channels.
 
-This service periodically checks for undelivered events and sends them
-through the appropriate channels based on configured rules.
+Periodically checks for undelivered events and sends them through
+appropriate channels (Discord, email, webhook) based on severity rules.
 """
 
 import smtplib
@@ -18,26 +18,28 @@ from backend.models import DatabaseManager, Event, EventDelivery
 from backend.config_manager import config_manager
 
 
-# Background thread handle
 _worker_thread: Optional[threading.Thread] = None
 _stop_event = threading.Event()
-
-# Check interval in seconds
 CHECK_INTERVAL = 10
 
 
+# =============================================================================
+# Configuration Helpers
+# =============================================================================
+
+
 def _get_notification_config() -> Dict:
-    """Get the notifications module config."""
+    """Get the notifications module configuration."""
     return config_manager.get("modules", {}).get("notifications", {})
 
 
 def _get_channels() -> List[Dict]:
-    """Get all notification channels from config."""
+    """Get all configured notification channels."""
     return _get_notification_config().get("channels", [])
 
 
 def _get_rules() -> List[Dict]:
-    """Get all notification rules from config."""
+    """Get all configured delivery rules."""
     return _get_notification_config().get("rules", [])
 
 
@@ -47,11 +49,10 @@ def _get_db() -> DatabaseManager:
 
 
 def _get_matching_channels(severity: int) -> List[Dict]:
-    """Get all enabled channels that should receive events of the given severity."""
+    """Get all enabled channels matching the given severity level."""
     channels = _get_channels()
     rules = _get_rules()
 
-    # Build channel lookup
     channel_map = {c["id"]: c for c in channels if c.get("enabled", True)}
 
     matching_channel_ids = set()
@@ -62,7 +63,6 @@ def _get_matching_channels(severity: int) -> List[Dict]:
         min_sev = rule.get("min_severity", 1)
         max_sev = rule.get("max_severity")
 
-        # Check if severity falls within rule range
         if severity >= min_sev:
             if max_sev is None or severity <= max_sev:
                 channel_id = rule.get("channel_id")
@@ -72,9 +72,9 @@ def _get_matching_channels(severity: int) -> List[Dict]:
     return [channel_map[cid] for cid in matching_channel_ids]
 
 
-# ─────────────────────────────────────────────────────────────────────────────
+# =============================================================================
 # Email Delivery (SMTP)
-# ─────────────────────────────────────────────────────────────────────────────
+# =============================================================================
 
 
 def send_email(channel_config: Dict, event: Event) -> Dict[str, Any]:
@@ -206,18 +206,16 @@ Message:
         return {"success": False, "error": str(e)}
 
 
-# ─────────────────────────────────────────────────────────────────────────────
+# =============================================================================
 # Discord Webhook Delivery
-# ─────────────────────────────────────────────────────────────────────────────
+# =============================================================================
 
 
 def send_discord(channel_config: Dict, event: Event) -> Dict[str, Any]:
-    """Send notification via Discord webhook.
+    """Send event via Discord webhook.
 
     Config example:
-    {
-        "webhook_url": "https://discord.com/api/webhooks/..."
-    }
+        {"webhook_url": "https://discord.com/api/webhooks/..."}
     """
     try:
         import urllib.request
@@ -278,20 +276,20 @@ def send_discord(channel_config: Dict, event: Event) -> Dict[str, Any]:
         return {"success": False, "error": str(e)}
 
 
-# ─────────────────────────────────────────────────────────────────────────────
+# =============================================================================
 # Generic Webhook Delivery
-# ─────────────────────────────────────────────────────────────────────────────
+# =============================================================================
 
 
 def send_webhook(channel_config: Dict, event: Event) -> Dict[str, Any]:
-    """Send notification via generic webhook.
+    """Send event via generic HTTP webhook.
 
     Config example:
-    {
-        "url": "https://example.com/webhook",
-        "method": "POST",
-        "headers": {"Authorization": "Bearer token"}
-    }
+        {
+            "url": "https://example.com/webhook",
+            "method": "POST",
+            "headers": {"Authorization": "Bearer token"}
+        }
     """
     try:
         import urllib.request
@@ -329,9 +327,9 @@ def send_webhook(channel_config: Dict, event: Event) -> Dict[str, Any]:
         return {"success": False, "error": str(e)}
 
 
-# ─────────────────────────────────────────────────────────────────────────────
+# =============================================================================
 # Delivery Dispatcher
-# ─────────────────────────────────────────────────────────────────────────────
+# =============================================================================
 
 
 DELIVERY_HANDLERS = {
@@ -378,13 +376,17 @@ def record_delivery(
     session.add(delivery)
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Main Worker Loop
-# ─────────────────────────────────────────────────────────────────────────────
+# =============================================================================
+# Worker Loop
+# =============================================================================
 
 
 def process_pending_events() -> int:
-    """Process all undelivered events. Returns count of deliveries attempted."""
+    """Process all undelivered events.
+
+    Returns:
+        Number of delivery attempts made.
+    """
     db = _get_db()
     session = db.get_session()
     delivery_count = 0
@@ -469,13 +471,13 @@ def _worker_loop():
     print("[notification_service] Worker stopped")
 
 
-# ─────────────────────────────────────────────────────────────────────────────
+# =============================================================================
 # Public API
-# ─────────────────────────────────────────────────────────────────────────────
+# =============================================================================
 
 
 def start_notification_service():
-    """Start the notification delivery background service."""
+    """Start the event delivery background service."""
     global _worker_thread
 
     # Check if notifications module is enabled
