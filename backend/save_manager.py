@@ -804,6 +804,31 @@ class SaveManager:
                     }
                 )
             return result
+        
+    def get_latest_monitor_point(self, monitor_body_id: int) -> Optional[Dict[str, Any]]:
+        """Return the latest monitor point for a given monitor body ID."""
+        if self.db_manager is None or MonitorPoints is None:
+            return None
+
+        with self.get_db_session() as session:
+            if session is None:
+                return None
+
+            mp = (
+                session.query(MonitorPoints)
+                .filter(MonitorPoints.monitor_body_id == monitor_body_id)
+                .order_by(MonitorPoints.timestamp.desc())
+                .first()
+            )
+            if not mp:
+                return None
+
+            return {
+                "id": mp.id,
+                "monitor_body_id": mp.monitor_body_id,
+                "timestamp": mp.timestamp.isoformat() if mp.timestamp else None,
+                "value": mp.value,
+            }
 
     # -------------------------------------------------------------------------
     # VM CRUD

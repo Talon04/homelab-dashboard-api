@@ -185,7 +185,7 @@ def run_monitoring_cycle() -> None:
 
             # Record the monitoring point
             point = MonitorPoints(
-                monitor_data_id=md.id,
+                monitor_body_id=md.id,
                 value=value,
             )
             session.add(point)

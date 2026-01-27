@@ -137,7 +137,7 @@ class MonitorPoints(Base):
     __tablename__ = "monitor_points"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    monitor_data_id = Column(Integer, ForeignKey("monitor_bodies.id"), nullable=False)
+    monitor_body_id = Column(Integer, ForeignKey("monitor_bodies.id"), nullable=False)
     timestamp = Column(DateTime, default=datetime.utcnow)
     value = Column(String, nullable=False)  # online | offline | unknown
 

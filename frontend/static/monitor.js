@@ -98,6 +98,7 @@
         if (body.enabled) {
           const opt = document.createElement('option');
           opt.value = body.id;
+          opt.name = body.id;
           const target = body.name || body.container_id || body.vm_id || `id:${body.id}`;
           opt.textContent = `${target} (${body.monitor_type || 'monitor'})`;
           opt.dataset.body = JSON.stringify(body);
@@ -382,8 +383,11 @@
 
     // Try to load monitor points/history
     try {
-      // For now, show placeholder data - this would be extended with actual API calls
-      const state = currentSelection?.data?.state || currentSelection?.monitorData?.last_state || 'unknown';
+      // 
+      const res = await fetch(`/api/monitor/points/latest/${encodeURIComponent(monitorId)}`);
+      if (!res.ok) throw new Error('Failed to load latest monitor point');
+      const data = await res.json();
+      const state = data.value;
       if (statusEl) {
         statusEl.textContent = state.charAt(0).toUpperCase() + state.slice(1);
         if (state === 'running' || state === 'online') {
@@ -400,7 +404,7 @@
       }
 
       if (lastCheckEl) {
-        lastCheckEl.textContent = new Date().toLocaleTimeString();
+        lastCheckEl.textContent = data.timestamp ? new Date(data.timestamp).toLocaleTimeString() : 'Error, timestamp missing';
       }
 
       // Load events for this target
@@ -419,6 +423,7 @@
       console.warn('Failed to load monitor view data:', e);
     }
   }
+
 
   // ─────────────────────────────────────────────────────────────────────────
   // Save Settings

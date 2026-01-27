@@ -76,3 +76,12 @@ def api_get_monitor_bodies():
     sm = get_save_manager()
     data = sm.get_all_monitor_bodies()
     return jsonify(data)
+@monitor_bp.route("/api/monitor/points/latest/<int:monitor_body_id>")
+def api_get_latest_monitor_point(monitor_body_id):
+    """Return the latest monitor point for a given monitor body ID."""
+
+    sm = get_save_manager()
+    data = sm.get_latest_monitor_point(monitor_body_id)
+    if data is None:
+        return jsonify({"error": "Not found"}), 404
+    return jsonify(data)
