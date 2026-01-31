@@ -225,7 +225,9 @@ async function loadModulesUI() {
   if (!list) return;
   const available = [
     { id: 'containers', label: 'Containers' },
-    { id: 'monitor', label: 'Monitor' },
+    { id: 'monitor', label: 'Monitor' , config: {
+      polling_rate: { label: 'Polling Rate for Statistics and Monitor Events in seconds', type: 'number', placeholder: '10' }
+    }},
     {
       id: 'proxmox', label: 'Proxmox VMs', config: {
         api_url: { label: 'API URL', type: 'text', placeholder: 'https://host:8006/api2/json' },
@@ -236,7 +238,11 @@ async function loadModulesUI() {
       }
     },
     { id: 'code_editor', label: 'Code Editor' },
-    { id: 'notifications', label: 'Notifications' }
+    {
+      id: 'notifications', label: 'Notifications', config: {
+        polling_rate: { label: 'Polling Rate for Notifications in seconds (This is the rate at which the sending of notifications is checked)', type: 'number', placeholder: '60' }
+      }
+    }
   ];
   let enabled = ["containers"];
   let order = ["containers"];

@@ -11,19 +11,14 @@ import backend.config_utils
 from backend.widget_service import start_widget_scheduler
 from backend.monitoring_service import start_monitoring_service
 from backend.notification_service import start_notification_service
-from backend.docker_utils import is_testing_mode
 
 from backend.routes_bps.pages_routes import pages_bp
 from backend.routes_bps.containers_routes import containers_bp
 from backend.routes_bps.config_routes import config_bp
 from backend.routes_bps.code_routes import code_bp
 from backend.routes_bps.monitor_routes import monitor_bp
+from backend.routes_bps.event_routes import event_bp
 from backend.routes_bps.notification_routes import notification_bp
-
-# MOCK_START - Delete for production
-if is_testing_mode():
-    from backend.routes_bps.testing_routes import testing_bp
-# MOCK_END
 
 
 app = Flask(
@@ -88,10 +83,6 @@ app.register_blueprint(containers_bp)
 app.register_blueprint(config_bp)
 app.register_blueprint(code_bp)
 app.register_blueprint(monitor_bp)
+app.register_blueprint(event_bp)
 app.register_blueprint(notification_bp)
-
-# MOCK_START - Delete for production
-if is_testing_mode():
-    app.register_blueprint(testing_bp)
-    print("[app] Testing API enabled (TESTING_MODE=1)")
 # MOCK_END

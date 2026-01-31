@@ -336,3 +336,17 @@ def set_exposed_containers():
 
     config_utils.set_exposed_containers(container_id, exposed)
     return jsonify({"message": "Container exposure status updated"}), 200
+# =============================================================================
+# Other container-related routes could go here
+# =============================================================================
+@containers_bp.route("/api/containers/uptime/<container_id>", methods=["GET"])
+def get_container_uptime(container_id):
+    """Return the uptime of a specific container."""
+    try:
+        uptime = docker_utils.get_container_uptime(container_id)
+        if uptime is None:
+            return jsonify({"error": "Container not found"}), 404
+        return jsonify({"uptime": uptime}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    

@@ -229,11 +229,8 @@
 
     updateDisplayPanel();
     populateNotificationSettings(body.event_severity_settings);
-    showView('view');
+    showView('view');  // This already calls loadMonitorViewData internally
     document.getElementById('monitor-display').classList.remove('hidden');
-
-    // Load additional data for the view
-    await loadMonitorViewData(monitorId);
   }
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -364,9 +361,10 @@
       iconSettings.classList.remove('hidden');
       iconMonitor.classList.add('hidden');
 
-      // Load view data if we have a monitor
-      if (currentSelection?.monitorData?.enabled) {
-        loadMonitorViewData(currentSelection.monitorData.id || currentSelection.id);
+      // Load view data - use monitor ID if we have one, otherwise use container/VM ID
+      if (currentSelection) {
+        const targetId = currentSelection.monitorData?.id || currentSelection.id;
+        loadMonitorViewData(targetId);
       }
     }
   }
@@ -400,7 +398,13 @@
       }
 
       if (uptimeEl) {
-        uptimeEl.textContent = '--';
+        const res = await fetch(`/api/containers/uptime/${encodeURIComponent(currentSelection.monitorData?.container_id || currentSelection.id)}`);
+        if (res.ok) {
+          const uptimeData = await res.json();
+          uptimeEl.textContent = uptimeData.uptime || '--';
+        } else {
+          uptimeEl.textContent = 'Uptime data not available';
+        }
       }
 
       if (lastCheckEl) {
@@ -409,15 +413,36 @@
 
       // Load events for this target
       if (eventsListEl && currentSelection) {
-        const objectType = currentSelection.type === 'monitor' ? 'monitor' : currentSelection.type;
+        const objectType = currentSelection.type;
         const objectId = currentSelection.monitorData?.id || currentSelection.id;
-
-        // For now show placeholder - would fetch from events API
-        eventsListEl.innerHTML = `
-          <div class="text-sm text-gray-500 p-2 bg-gray-50 rounded">
-            Event history will appear here once monitoring is active.
-          </div>
-        `;
+        let eventsRes;
+        if (currentSelection.type === 'container' || currentSelection.type === 'docker') {
+          eventsRes = await fetch(`/api/notifications/events/lastEventsByContainerId/${encodeURIComponent(objectId)}:10`);
+        } else if (currentSelection.type === 'vm') {
+          eventsRes = await fetch(`/api/notifications/events/lastEventsByVmId/${encodeURIComponent(objectId)}:10`);
+        }
+        if (eventsRes && eventsRes.ok) {
+          const events = await eventsRes.json();
+          if (events.length === 0) {
+            eventsListEl.innerHTML = `
+              <div class="text-sm text-gray-500 p-2 bg-gray-50 rounded">
+                No events recorded yet.
+              </div>
+            `;
+          } else {
+            eventsListEl.innerHTML = '';
+            events.forEach(event => {
+              const eventEl = document.createElement('div');
+              eventEl.className = 'p-2 border-b last:border-b-0';
+              eventEl.innerHTML = `
+                <div class="text-sm font-medium">${event.type.charAt(0).toUpperCase() + event.type.slice(1)}</div>
+                <div class="text-xs text-gray-500">${new Date(event.timestamp).toLocaleString()}</div>
+                <div class="text-sm mt-1">${event.message}</div>
+              `;
+              eventsListEl.appendChild(eventEl);
+            });
+          }
+        }
       }
     } catch (e) {
       console.warn('Failed to load monitor view data:', e);

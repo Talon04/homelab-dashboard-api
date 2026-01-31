@@ -20,7 +20,6 @@ from backend.config_manager import config_manager
 
 _worker_thread: Optional[threading.Thread] = None
 _stop_event = threading.Event()
-CHECK_INTERVAL = 10
 
 
 # =============================================================================
@@ -387,6 +386,11 @@ def process_pending_events() -> int:
     Returns:
         Number of delivery attempts made.
     """
+    ##skip if notifications module is disabled
+    enabled_modules = config_manager.get("enabled_modules", [])
+    if "notifications" not in enabled_modules:
+        return 0  
+
     db = _get_db()
     session = db.get_session()
     delivery_count = 0
@@ -457,8 +461,6 @@ def process_pending_events() -> int:
 
 def _worker_loop():
     """Background worker loop."""
-    print("[notification_service] Worker started")
-
     while not _stop_event.is_set():
         try:
             process_pending_events()
@@ -466,7 +468,7 @@ def _worker_loop():
             print(f"[notification_service] Worker error: {e}")
 
         # Wait for next check interval or stop signal
-        _stop_event.wait(timeout=CHECK_INTERVAL)
+        _stop_event.wait(timeout=config_manager.get("modules", {}).get("notifications", {}).get("polling_rate", 60))
 
     print("[notification_service] Worker stopped")
 
@@ -480,18 +482,10 @@ def start_notification_service():
     """Start the event delivery background service."""
     global _worker_thread
 
-    # Check if notifications module is enabled
-    enabled_modules = config_manager.get("enabled_modules", [])
-    if "notifications" not in enabled_modules:
-        print(
-            "[notification_service] Notifications module not enabled, skipping service start"
-        )
-        return
 
     if _worker_thread is not None and _worker_thread.is_alive():
         print("[notification_service] Service already running")
         return
-
     _stop_event.clear()
     _worker_thread = threading.Thread(target=_worker_loop, daemon=True)
     _worker_thread.start()

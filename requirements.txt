@@ -3,3 +3,7 @@ docker
 python-dotenv
 gunicorn
 sqlalchemy
+
+# Testing
+pytest
+pytest-mock

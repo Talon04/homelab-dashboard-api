@@ -11,7 +11,7 @@ import json
 import os
 from typing import Any, Dict, Optional
 
-from backend.paths import BASE_DIR
+from backend.paths import DATA_DIR
 
 
 # =============================================================================
@@ -27,7 +27,8 @@ class ConfigManager:
     """
 
     def __init__(self, config_path: Optional[str] = None) -> None:
-        self.config_path = config_path or os.path.join(BASE_DIR, "data", "config.json")
+        # Use DATA_DIR which respects environment variables
+        self.config_path = config_path or os.path.join(DATA_DIR, "config.json")
         self._config: Dict[str, Any] = {}
         self.load_config()
 
@@ -71,7 +72,12 @@ class ConfigManager:
                     "custom_css": "",
                     "pages": ["containers"],
                 },
-                "monitor": {},
+                "monitor": {
+                    "polling_rate": 10.0
+                },
+                "notifications": {
+                    "polling_rate": 60.0
+                }
             },
         }
 
