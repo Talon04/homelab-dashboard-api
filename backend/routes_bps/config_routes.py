@@ -131,6 +131,49 @@ def set_first_boot():
     return jsonify({"message": "First boot flag updated"}), 200
 
 
+# =============================================================================
+# DATABASE RETENTION CONFIGURATION
+# =============================================================================
+
+
+@config_bp.route("/api/config/retention_days")
+def get_retention_days():
+    """Return the number of days to retain historical data."""
+
+    retention_days = config_utils.get_retention_days()
+    return jsonify({"retention_days": retention_days})
+
+
+@config_bp.route("/api/config/retention_days", methods=["POST"])
+def set_retention_days():
+    """Set the data retention period in days."""
+
+    data = request.get_json()
+
+    if not data:
+        return jsonify({"error": "Invalid or missing JSON body"}), 400
+
+    retention_days = data.get("retention_days")
+
+    if retention_days is None:
+        return jsonify({"error": "Missing retention_days"}), 400
+
+    try:
+        retention_days = int(retention_days)
+        if retention_days < 0:
+            return jsonify({"error": "Retention days must be non-negative"}), 400
+    except ValueError:
+        return jsonify({"error": "Retention days must be a valid integer"}), 400
+
+    config_utils.set_retention_days(retention_days)
+    return jsonify({"message": "Retention days updated"}), 200
+
+
+# =============================================================================
+# MODULE CONFIGURATION
+# =============================================================================
+
+
 @config_bp.route("/api/config/modules")
 def get_modules():
     """Return the list of enabled feature modules."""

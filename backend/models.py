@@ -229,20 +229,12 @@ class DatabaseManager:
                      Defaults to DATA_DIR/data.db.
         """
         if db_path is None:
-            os.makedirs(DATA_DIR, exist_ok=True)
             db_path = os.path.join(DATA_DIR, "data.db")
-        else:
-            abs_path = os.path.abspath(db_path)
-            dir_name = os.path.dirname(abs_path)
-            if dir_name:
-                os.makedirs(dir_name, exist_ok=True)
-            db_path = abs_path
 
         self.db_url = f"sqlite:///{db_path}"
         self.engine = create_engine(self.db_url, echo=False)
         self.Session = sessionmaker(bind=self.engine)
-
-        Base.metadata.create_all(self.engine)
+        # Note: Table creation is now handled by Alembic migrations in app.py
 
     def get_session(self):
         """Get a new database session."""

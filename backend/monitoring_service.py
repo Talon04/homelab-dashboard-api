@@ -19,7 +19,7 @@ from datetime import datetime
 from typing import Dict, List, Optional
 
 from backend.save_manager import get_save_manager
-from backend.config_manager import config_manager
+from backend import config_utils
 from backend import docker_utils
 
 try:
@@ -31,12 +31,11 @@ except Exception:
     Event = None  # type: ignore
 
 
-_monitor_thread: Optional[threading.Thread] = None
+_worker_thread: Optional[threading.Thread] = None
 _monitor_stop_flag = False
 # Tracks previous states per monitor_body.id for detecting state changes
 _previous_states: Dict[int, str] = {}
 _stop_event = threading.Event()
-
 
 
 # =============================================================================
@@ -236,17 +235,12 @@ def _monitor_loop() -> None:
             run_monitoring_cycle()
         except Exception as exc:
             print(f"[monitoring_service] Error in monitoring cycle: {exc}")
-        _stop_event.wait(
-            float (config_manager.get("modules", {})
-            .get("monitor", {})
-            .get("polling_rate", 10.0))
-        )
+        _stop_event.wait(config_utils.get_monitoring_polling_rate())
 
 
 def start_monitoring_service() -> None:
     """Start the monitoring background service."""
     global _worker_thread
-
 
     if _worker_thread is not None and _worker_thread.is_alive():
         print("[notification_service] Service already running")
@@ -268,6 +262,7 @@ def stop_monitoring_service() -> None:
     _worker_thread.join(timeout=5)
     _worker_thread = None
     print("[monitoring_service] Service stopped")
+
 
 def is_service_running() -> bool:
     """Check if the monitoring service is running."""

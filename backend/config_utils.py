@@ -343,3 +343,106 @@ def set_module_config(module_id, config_dict):
     modules[module_id] = {**modules.get(module_id, {}), **config_dict}
     config_manager.set("modules", modules)
     print(f"Updated module config for {module_id}")
+
+
+# =============================================================================
+# DATA RETENTION CONFIGURATION
+# =============================================================================
+
+
+def get_retention_days():
+    """Get the number of days to retain historical data.
+
+    Returns:
+        int: Number of days to keep data. 0 or negative = disabled.
+    """
+    return config_manager.get("retention_days", 30)
+
+
+def set_retention_days(days):
+    """Set the data retention period in days.
+
+    Args:
+        days (int): Number of days to keep data. 0 or negative = disabled.
+    """
+    if not isinstance(days, (int, float)):
+        return
+    config_manager.set("retention_days", int(days))
+    print(f"Data retention set to {days} days")
+
+
+# =============================================================================
+# POLLING RATE CONFIGURATION
+# =============================================================================
+
+
+def get_monitoring_polling_rate():
+    """Get the monitoring service polling rate in seconds.
+
+    Returns:
+        float: Polling rate in seconds. Defaults to 10.0. Minimum 1.0.
+    """
+    rate = (
+        config_manager.get("modules", {}).get("monitor", {}).get("polling_rate", 10.0)
+    )
+    try:
+        rate = float(rate)
+        return max(1.0, rate)  # Minimum 1 second
+    except (ValueError, TypeError):
+        return 10.0
+
+
+def set_monitoring_polling_rate(rate):
+    """Set the monitoring service polling rate in seconds.
+
+    Args:
+        rate (float): Polling rate in seconds. Must be >= 1.0.
+    """
+    if not isinstance(rate, (int, float)):
+        return
+    rate = float(rate)
+    if rate < 1.0:
+        print("[config_utils] Monitoring polling rate must be >= 1.0")
+        return
+
+    monitor_config = get_module_config("monitor") or {}
+    monitor_config["polling_rate"] = rate
+    set_module_config("monitor", monitor_config)
+    print(f"Monitoring polling rate set to {rate} seconds")
+
+
+def get_notification_polling_rate():
+    """Get the notification service polling rate in seconds.
+
+    Returns:
+        float: Polling rate in seconds. Defaults to 60.0. Minimum 1.0.
+    """
+    rate = (
+        config_manager.get("modules", {})
+        .get("notifications", {})
+        .get("polling_rate", 60.0)
+    )
+    try:
+        rate = float(rate)
+        return max(1.0, rate)  # Minimum 1 second
+    except (ValueError, TypeError):
+        return 60.0
+
+
+def set_notification_polling_rate(rate):
+    """Set the notification service polling rate in seconds.
+
+    Args:
+        rate (float): Polling rate in seconds. Must be >= 1.0.
+    """
+    if not isinstance(rate, (int, float)):
+        return
+    rate = float(rate)
+    if rate < 1.0:
+        print("[config_utils] Notification polling rate must be >= 1.0")
+        return
+
+    notification_config = get_module_config("notifications") or {}
+    notification_config["polling_rate"] = rate
+    set_module_config("notifications", notification_config)
+    print(f"Notification polling rate set to {rate} seconds")

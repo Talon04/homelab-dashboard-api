@@ -3,6 +3,7 @@ docker
 python-dotenv
 gunicorn
 sqlalchemy
+alembic
 
 # Testing
 pytest

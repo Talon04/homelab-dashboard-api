@@ -15,6 +15,7 @@ from datetime import datetime
 from typing import Dict, List, Optional, Any
 
 from backend.models import DatabaseManager, Event, EventDelivery
+from backend import config_utils
 from backend.config_manager import config_manager
 
 
@@ -389,7 +390,7 @@ def process_pending_events() -> int:
     ##skip if notifications module is disabled
     enabled_modules = config_manager.get("enabled_modules", [])
     if "notifications" not in enabled_modules:
-        return 0  
+        return 0
 
     db = _get_db()
     session = db.get_session()
@@ -468,7 +469,7 @@ def _worker_loop():
             print(f"[notification_service] Worker error: {e}")
 
         # Wait for next check interval or stop signal
-        _stop_event.wait(timeout=config_manager.get("modules", {}).get("notifications", {}).get("polling_rate", 60))
+        _stop_event.wait(timeout=config_utils.get_notification_polling_rate())
 
     print("[notification_service] Worker stopped")
 
@@ -481,7 +482,6 @@ def _worker_loop():
 def start_notification_service():
     """Start the event delivery background service."""
     global _worker_thread
-
 
     if _worker_thread is not None and _worker_thread.is_alive():
         print("[notification_service] Service already running")
