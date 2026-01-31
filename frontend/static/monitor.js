@@ -398,10 +398,24 @@
       }
 
       if (uptimeEl) {
-        const res = await fetch(`/api/containers/uptime/${encodeURIComponent(currentSelection.monitorData?.container_id || currentSelection.id)}`);
-        if (res.ok) {
-          const uptimeData = await res.json();
-          uptimeEl.textContent = uptimeData.uptime || '--';
+        // For monitors, use the actual container_id from the body, not the monitor ID
+        let containerId;
+        if (currentSelection.type === 'monitor' && currentSelection.data?.container_id) {
+          containerId = currentSelection.data.container_id;
+        } else if (currentSelection.type === 'container') {
+          containerId = currentSelection.id;
+        } else {
+          containerId = currentSelection.monitorData?.container_id;
+        }
+
+        if (containerId) {
+          const res = await fetch(`/api/containers/uptime/${encodeURIComponent(containerId)}`);
+          if (res.ok) {
+            const uptimeData = await res.json();
+            uptimeEl.textContent = uptimeData.uptime || '--';
+          } else {
+            uptimeEl.textContent = 'Uptime data not available';
+          }
         } else {
           uptimeEl.textContent = 'Uptime data not available';
         }
@@ -413,13 +427,20 @@
 
       // Load events for this target
       if (eventsListEl && currentSelection) {
-        const objectType = currentSelection.type;
-        const objectId = currentSelection.monitorData?.id || currentSelection.id;
         let eventsRes;
-        if (currentSelection.type === 'container' || currentSelection.type === 'docker') {
-          eventsRes = await fetch(`/api/notifications/events/lastEventsByContainerId/${encodeURIComponent(objectId)}:10`);
+
+        // Determine the actual target type and ID
+        if (currentSelection.type === 'monitor') {
+          // For monitors, check what they're monitoring (container or VM)
+          if (currentSelection.data?.container_id) {
+            eventsRes = await fetch(`/api/notifications/events/lastEventsByContainerId/${encodeURIComponent(currentSelection.data.container_id)}:10`);
+          } else if (currentSelection.data?.vm_id) {
+            eventsRes = await fetch(`/api/notifications/events/lastEventsByVmId/${encodeURIComponent(currentSelection.data.vm_id)}:10`);
+          }
+        } else if (currentSelection.type === 'container' || currentSelection.type === 'docker') {
+          eventsRes = await fetch(`/api/notifications/events/lastEventsByContainerId/${encodeURIComponent(currentSelection.id)}:10`);
         } else if (currentSelection.type === 'vm') {
-          eventsRes = await fetch(`/api/notifications/events/lastEventsByVmId/${encodeURIComponent(objectId)}:10`);
+          eventsRes = await fetch(`/api/notifications/events/lastEventsByVmId/${encodeURIComponent(currentSelection.id)}:10`);
         }
         if (eventsRes && eventsRes.ok) {
           const events = await eventsRes.json();
