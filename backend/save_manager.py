@@ -100,6 +100,18 @@ class SaveManager:
     # Container CRUD
     # -------------------------------------------------------------------------
 
+    def get_container_docker_id(self, db_id: int) -> Optional[str]:
+        """Get Docker ID for a container by its database primary key."""
+        if self.db_manager is None or Container is None:
+            return None
+
+        with self.get_db_session() as session:
+            if session is None:
+                return None
+
+            container = session.query(Container).filter(Container.id == db_id).first()
+            return container.docker_id if container else None
+
     def get_container(self, container_id: str) -> Optional[Dict]:
         """Get container data by Docker ID.
 
@@ -661,6 +673,7 @@ class SaveManager:
                 "id": md.id,
                 "name": md.name,
                 "container_id": md.container_id,
+                "docker_id": cont.docker_id,  # Include the actual Docker ID
                 "vm_id": md.vm_id,
                 "monitor_type": md.monitor_type,
                 "enabled": bool(md.enabled),
@@ -804,8 +817,10 @@ class SaveManager:
                     }
                 )
             return result
-        
-    def get_latest_monitor_point(self, monitor_body_id: int) -> Optional[Dict[str, Any]]:
+
+    def get_latest_monitor_point(
+        self, monitor_body_id: int
+    ) -> Optional[Dict[str, Any]]:
         """Return the latest monitor point for a given monitor body ID."""
         if self.db_manager is None or MonitorPoints is None:
             return None

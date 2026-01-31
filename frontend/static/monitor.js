@@ -398,18 +398,36 @@
       }
 
       if (uptimeEl) {
-        // For monitors, use the actual container_id from the body, not the monitor ID
-        let containerId;
+        // For monitors, query the DB to get the Docker ID from the container_id (database FK)
+        let dockerId;
         if (currentSelection.type === 'monitor' && currentSelection.data?.container_id) {
-          containerId = currentSelection.data.container_id;
+          // Query the backend to resolve DB container_id to Docker ID
+          try {
+            const dockerIdRes = await fetch(`/api/containers/docker-id/${currentSelection.data.container_id}`);
+            if (dockerIdRes.ok) {
+              const dockerIdData = await dockerIdRes.json();
+              dockerId = dockerIdData.docker_id;
+            }
+          } catch (e) {
+            console.warn('Failed to resolve container_id to docker_id:', e);
+          }
         } else if (currentSelection.type === 'container') {
-          containerId = currentSelection.id;
-        } else {
-          containerId = currentSelection.monitorData?.container_id;
+          dockerId = currentSelection.id;
+        } else if (currentSelection.monitorData?.container_id) {
+          // Try to resolve this too
+          try {
+            const dockerIdRes = await fetch(`/api/containers/docker-id/${currentSelection.monitorData.container_id}`);
+            if (dockerIdRes.ok) {
+              const dockerIdData = await dockerIdRes.json();
+              dockerId = dockerIdData.docker_id;
+            }
+          } catch (e) {
+            console.warn('Failed to resolve container_id to docker_id:', e);
+          }
         }
 
-        if (containerId) {
-          const res = await fetch(`/api/containers/uptime/${encodeURIComponent(containerId)}`);
+        if (dockerId) {
+          const res = await fetch(`/api/containers/uptime/${encodeURIComponent(dockerId)}`);
           if (res.ok) {
             const uptimeData = await res.json();
             uptimeEl.textContent = uptimeData.uptime || '--';

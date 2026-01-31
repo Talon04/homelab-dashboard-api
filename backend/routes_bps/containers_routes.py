@@ -69,6 +69,16 @@ def list_containers():
     return jsonify(docker_utils.list_containers())
 
 
+@containers_bp.route("/api/containers/docker-id/<int:db_id>")
+def get_container_docker_id(db_id):
+    """Get Docker ID for a container by its database primary key."""
+    sm = get_save_manager()
+    docker_id = sm.get_container_docker_id(db_id)
+    if docker_id is None:
+        return jsonify({"error": "Container not found"}), 404
+    return jsonify({"docker_id": docker_id})
+
+
 @containers_bp.route("/api/vms")
 @containers_bp.route("/api/data/vms")
 def list_vms():
@@ -336,6 +346,8 @@ def set_exposed_containers():
 
     config_utils.set_exposed_containers(container_id, exposed)
     return jsonify({"message": "Container exposure status updated"}), 200
+
+
 # =============================================================================
 # Other container-related routes could go here
 # =============================================================================
@@ -349,4 +361,3 @@ def get_container_uptime(container_id):
         return jsonify({"uptime": uptime}), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
-    
