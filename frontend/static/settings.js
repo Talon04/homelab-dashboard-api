@@ -55,15 +55,21 @@ async function loadSettings() {
     const proxyRes = await fetch("/api/config/proxy_count");
     const proxyData = await proxyRes.json();
 
+    // Load retention days configuration
+    const retentionRes = await fetch("/api/config/retention_days");
+    const retentionData = await retentionRes.json();
+
     document.getElementById("internal-ip").value = internalIpData.internal_ip || "127.0.0.1";
     document.getElementById("external-ip").value = externalIpData.external_ip || "127.0.0.1";
     document.getElementById("proxy-count").value = proxyData.proxy_count || 0;
+    document.getElementById("retention-days").value = retentionData.retention_days || 30;
 
     // Store current settings
     currentSettings = {
       internal_ip: internalIpData.internal_ip || "127.0.0.1",
       external_ip: externalIpData.external_ip || "127.0.0.1",
-      proxy_count: proxyData.proxy_count || 0
+      proxy_count: proxyData.proxy_count || 0,
+      retention_days: retentionData.retention_days || 30
     };
 
   } catch (err) {
@@ -78,6 +84,7 @@ async function saveSettings() {
     const internalIp = document.getElementById("internal-ip").value.trim();
     const externalIp = document.getElementById("external-ip").value.trim();
     const proxyCount = parseInt(document.getElementById("proxy-count").value) || 0;
+    const retentionDays = parseInt(document.getElementById("retention-days").value) || 0;
 
     // Validate inputs
     if (!isValidIP(internalIp)) {
@@ -92,6 +99,11 @@ async function saveSettings() {
 
     if (proxyCount < 0) {
       showStatus("Proxy count cannot be negative", "error");
+      return;
+    }
+
+    if (retentionDays < 0) {
+      showStatus("Retention days cannot be negative", "error");
       return;
     }
 
@@ -134,6 +146,19 @@ async function saveSettings() {
       throw new Error("Failed to save proxy settings");
     }
 
+    // Save retention days
+    const retentionRes = await fetch("/api/config/retention_days", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        retention_days: retentionDays
+      })
+    });
+
+    if (!retentionRes.ok) {
+      throw new Error("Failed to save retention settings");
+    }
+
     // Save module configuration (enabled + order + per-module configs)
     await saveModules();
 
@@ -141,7 +166,8 @@ async function saveSettings() {
     currentSettings = {
       internal_ip: internalIp,
       external_ip: externalIp,
-      proxy_count: proxyCount
+      proxy_count: proxyCount,
+      retention_days: retentionDays
     };
 
     showStatus("Settings and modules saved successfully!", "success");

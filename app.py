@@ -4,13 +4,19 @@ Initializes the Flask app, registers blueprints, and starts background
 services (widget scheduler, monitoring, event delivery).
 """
 
+import os
+import sys
 from flask import Flask
 from werkzeug.middleware.proxy_fix import ProxyFix
+from alembic.config import Config
+from alembic import command
+from sqlalchemy import inspect
 
 import backend.config_utils
 from backend.widget_service import start_widget_scheduler
 from backend.monitoring_service import start_monitoring_service
 from backend.notification_service import start_notification_service
+from backend.management_service import start_management_service
 
 from backend.routes_bps.pages_routes import pages_bp
 from backend.routes_bps.containers_routes import containers_bp
@@ -29,12 +35,63 @@ app = Flask(
 
 
 # =============================================================================
+# Database Initialization
+# =============================================================================
+
+
+def init_database():
+    """Initialize database with Alembic migrations.
+
+    Runs migrations on startup. For existing databases without version info,
+    stamps them with the initial revision to avoid recreating tables.
+    """
+    from backend.models import DatabaseManager
+    from backend.paths import DATA_DIR
+
+    db_path = os.path.join(DATA_DIR, "data.db")
+    db_exists = os.path.exists(db_path)
+
+    # Get Alembic config
+    alembic_ini = os.path.join(os.path.dirname(__file__), "alembic.ini")
+    alembic_cfg = Config(alembic_ini)
+
+    if db_exists:
+        # Check if database has tables but no alembic version
+        db_manager = DatabaseManager()
+        inspector = inspect(db_manager.engine)
+        tables = inspector.get_table_names()
+        has_alembic_version = "alembic_version" in tables
+
+        if tables and not has_alembic_version:
+            # Existing database without migrations - stamp it with initial revision
+            print("[app] Existing database detected without version info")
+            print("[app] Stamping database with initial revision")
+            command.stamp(alembic_cfg, "head")
+        else:
+            # Database has version info or is empty - run normal upgrade
+            print("[app] Running database migrations")
+            command.upgrade(alembic_cfg, "head")
+    else:
+        # New database - run migrations to create schema
+        print("[app] Initializing new database with migrations")
+        command.upgrade(alembic_cfg, "head")
+
+    print("[app] Database initialization complete")
+
+
+# =============================================================================
 # Background Services
 # =============================================================================
 
 
 def start_background_tasks():
     """Start all background services on app startup."""
+    try:
+        start_management_service()
+        print("[app] Management service started")
+    except Exception as e:
+        print(f"[app] Failed to start management service: {e}")
+
     try:
         start_widget_scheduler()
         print("[app] Widget scheduler started")
@@ -70,6 +127,9 @@ if proxy_count > 0:
         x_prefix=proxy_count,
     )
 
+# Initialize database (run migrations)
+init_database()
+
 start_background_tasks()
 
 
@@ -85,4 +145,3 @@ app.register_blueprint(code_bp)
 app.register_blueprint(monitor_bp)
 app.register_blueprint(event_bp)
 app.register_blueprint(notification_bp)
-# MOCK_END
