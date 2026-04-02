@@ -3,6 +3,7 @@ __pycache__/
 *.pyc
 *.log
 .env.*
+!.env.example
 .vscode/
 .venv
 backend/config/config.json
