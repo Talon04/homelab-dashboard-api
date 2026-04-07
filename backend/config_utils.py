@@ -402,7 +402,7 @@ def set_monitoring_polling_rate(rate):
         return
     rate = float(rate)
     if rate < 1.0:
-        print("[config_utils] Monitoring polling rate must be >= 1.0")
+        print("WARN [config_utils] Monitoring polling rate must be >= 1.0")
         return
 
     monitor_config = get_module_config("monitor") or {}
@@ -439,7 +439,7 @@ def set_notification_polling_rate(rate):
         return
     rate = float(rate)
     if rate < 1.0:
-        print("[config_utils] Notification polling rate must be >= 1.0")
+        print("WARN [config_utils] Notification polling rate must be >= 1.0")
         return
 
     notification_config = get_module_config("notifications") or {}

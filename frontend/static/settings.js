@@ -261,13 +261,44 @@ async function loadModulesUI() {
         token_secret: { label: 'Token Secret', type: 'password', placeholder: '********' },
         verify_ssl: { label: 'Verify SSL', type: 'checkbox' },
         node: { label: 'Node (optional)', type: 'text', placeholder: 'pve' }
-      }
+      },
+      tests: [
+        { id: 'proxmox', label: 'Test Proxmox API' }
+      ]
     },
     { id: 'code_editor', label: 'Code Editor' },
     {
       id: 'notifications', label: 'Notifications', config: {
         polling_rate: { label: 'Polling Rate for Notifications in seconds (This is the rate at which the sending of notifications is checked)', type: 'number', placeholder: '60' }
       }
+    },
+    {
+      id: 'dns_reverse_proxy', label: 'DNS/Reverse Proxy', config: {
+        reverse_proxy_provider: {
+          label: 'Reverse Proxy Provider',
+          type: 'select',
+          options: [{ value: 'caddy', label: 'Caddy' }],
+          default: 'caddy'
+        },
+        dns_provider: {
+          label: 'DNS Provider',
+          type: 'select',
+          options: [{ value: 'opnsense', label: 'OPNsense' }],
+          default: 'opnsense'
+        },
+        default_domain: { label: 'Default Domain (for builder)', type: 'text', placeholder: 'example.com' },
+        caddy_api_url: { label: 'Caddy API URL', type: 'text', placeholder: 'https://caddy.example.com:2019' },
+        caddy_api_token: { label: 'Caddy API Token', type: 'password', placeholder: '********' },
+        caddy_verify_ssl: { label: 'Verify Caddy SSL', type: 'checkbox', default: true },
+        opnsense_api_url: { label: 'OPNsense API URL', type: 'text', placeholder: 'https://opnsense.example.com' },
+        opnsense_api_key: { label: 'OPNsense API Key', type: 'text', placeholder: 'api-key' },
+        opnsense_api_secret: { label: 'OPNsense API Secret', type: 'password', placeholder: '********' },
+        opnsense_verify_ssl: { label: 'Verify OPNsense SSL', type: 'checkbox', default: true }
+      },
+      tests: [
+        { id: 'caddy', label: 'Test Caddy API' },
+        { id: 'opnsense', label: 'Test OPNsense API' }
+      ]
     }
   ];
   let enabled = ["containers"];
@@ -355,7 +386,25 @@ async function loadModulesUI() {
           input = document.createElement('input');
           input.type = 'checkbox';
           input.className = 'h-4 w-4';
-          input.checked = Boolean(modConfig[key] ?? (key === 'verify_ssl' ? true : false));
+          const fallback = (field.default !== undefined) ? field.default : (key.endsWith('verify_ssl') || key === 'verify_ssl');
+          input.checked = Boolean(modConfig[key] ?? fallback);
+        } else if (field.type === 'select') {
+          input = document.createElement('select');
+          input.className = 'w-full px-3 py-2 border border-gray-300 rounded-md';
+          const options = Array.isArray(field.options) ? field.options : [];
+          options.forEach((option) => {
+            const opt = document.createElement('option');
+            if (typeof option === 'string') {
+              opt.value = option;
+              opt.textContent = option;
+            } else {
+              opt.value = option.value;
+              opt.textContent = option.label || option.value;
+            }
+            input.appendChild(opt);
+          });
+          const fallbackValue = field.default ?? (options[0] && (typeof options[0] === 'string' ? options[0] : options[0].value)) ?? '';
+          input.value = String(modConfig[key] ?? fallbackValue);
         } else {
           input = document.createElement('input');
           input.type = field.type || 'text';
@@ -368,6 +417,30 @@ async function loadModulesUI() {
         wrap.appendChild(input);
         panel.appendChild(wrap);
       }
+
+      if (Array.isArray(meta.tests) && meta.tests.length > 0) {
+        const testWrap = document.createElement('div');
+        testWrap.className = 'mt-3 flex flex-wrap items-center gap-2';
+
+        meta.tests.forEach((testMeta) => {
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = 'px-3 py-1.5 text-sm bg-blue-500 text-white rounded hover:bg-blue-600';
+          btn.textContent = testMeta.label;
+          btn.dataset.moduleId = id;
+          btn.dataset.testId = testMeta.id;
+          btn.addEventListener('click', () => testModuleApi(card, id, testMeta));
+          testWrap.appendChild(btn);
+        });
+
+        const status = document.createElement('span');
+        status.className = 'text-xs text-gray-600';
+        status.dataset.testStatusFor = id;
+        testWrap.appendChild(status);
+
+        details.appendChild(testWrap);
+      }
+
       details.appendChild(panel);
       card.appendChild(details);
     }
@@ -409,6 +482,54 @@ function getModulesStateFromUI() {
     configs[mid][key] = val;
   });
   return { order, enabled, configs };
+}
+
+function getModuleConfigFromCard(card, moduleId) {
+  const config = {};
+  const inputs = Array.from(card.querySelectorAll('[data-module-id][data-config-key]'));
+  inputs.forEach((inp) => {
+    if (inp.dataset.moduleId !== moduleId) return;
+    const key = inp.dataset.configKey;
+    const val = inp.type === 'checkbox' ? inp.checked : inp.value;
+    config[key] = val;
+  });
+  return config;
+}
+
+async function testModuleApi(card, moduleId, testMeta) {
+  const status = card.querySelector(`[data-test-status-for="${moduleId}"]`);
+  if (status) {
+    status.textContent = 'Testing...';
+    status.className = 'text-xs text-blue-600';
+  }
+
+  const cfg = getModuleConfigFromCard(card, moduleId);
+
+  try {
+    const res = await fetch(`/api/config/module/${moduleId}/test/${testMeta.id}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ config: cfg })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (res.ok && data.ok) {
+      if (status) {
+        status.textContent = data.message || 'API test succeeded';
+        status.className = 'text-xs text-green-700';
+      }
+      return;
+    }
+    if (status) {
+      const errText = data.error ? ` (${data.error})` : '';
+      status.textContent = `${data.message || 'API test failed'}${errText}`;
+      status.className = 'text-xs text-red-700';
+    }
+  } catch (err) {
+    if (status) {
+      status.textContent = `API test failed: ${err.message}`;
+      status.className = 'text-xs text-red-700';
+    }
+  }
 }
 
 function updateNavFromModules(enabled) {

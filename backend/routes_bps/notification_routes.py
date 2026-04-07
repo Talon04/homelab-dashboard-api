@@ -3,9 +3,13 @@
 Handles notification channels and rules (config-backed).
 """
 
+from datetime import datetime
+from types import SimpleNamespace
+
 from flask import Blueprint, jsonify, request
 
 from backend.config_manager import config_manager
+from backend import notification_service
 
 
 notification_bp = Blueprint("notification", __name__)
@@ -168,6 +172,56 @@ def delete_channel(channel_id):
     _save_rules(rules)
 
     return jsonify({"message": "Channel deleted"})
+
+
+@notification_bp.route("/api/notifications/channels/<int:channel_id>/test", methods=["POST"])
+def test_channel(channel_id):
+    """Send a direct test delivery to a specific channel."""
+    data = request.get_json(silent=True) or {}
+    if not isinstance(data, dict):
+        data = {}
+
+    channels = _get_channels()
+    channel = next((c for c in channels if c.get("id") == channel_id), None)
+    if not channel:
+        print(f"FAIL [notification_routes] test_channel channel_id={channel_id} error=Channel not found")
+        return jsonify({"ok": False, "error": "Channel not found"}), 404
+
+    severity = data.get("severity", 2)
+    try:
+        severity = int(severity)
+        if severity < 1:
+            raise ValueError()
+    except (ValueError, TypeError):
+        print(f"FAIL [notification_routes] test_channel channel_id={channel_id} error=invalid severity")
+        return jsonify({"ok": False, "error": "severity must be a positive integer"}), 400
+
+    title = str(data.get("title") or "Channel Test Notification")
+    message = str(
+        data.get("message")
+        or f"This is a test message for channel '{channel.get('name', channel_id)}'."
+    )
+
+    fake_event = SimpleNamespace(
+        id=0,
+        severity=severity,
+        source="test",
+        title=title,
+        message=message,
+        timestamp=datetime.utcnow(),
+    )
+
+    result = notification_service.deliver_to_channel(channel, fake_event)
+    if result.get("success"):
+        print(f"OK [notification_routes] test_channel channel_id={channel_id} type={channel.get('channel_type')}")
+        return jsonify({"ok": True, "message": "Test delivery sent"}), 200
+    print(
+        f"[notification_routes] test_channel FAIL channel_id={channel_id} type={channel.get('channel_type')} error={result.get('error')}"
+    )
+    return (
+        jsonify({"ok": False, "error": result.get("error", "Test delivery failed")}),
+        400,
+    )
 
 
 # ─────────────────────────────────────────────────────────────────────────────

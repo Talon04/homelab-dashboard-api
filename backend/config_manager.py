@@ -58,7 +58,7 @@ class ConfigManager:
             "external_ip": "127.0.0.1",
             "first_boot": True,
             "enabled_modules": ["containers"],
-            "modules_order": ["containers", "proxmox", "code_editor", "monitor"],
+            "modules_order": ["containers", "proxmox", "code_editor", "monitor", "notifications", "dns_reverse_proxy"],
             "modules": {
                 "proxmox": {
                     "api_url": "https://proxmox.example:8006/api2/json",
@@ -77,6 +77,32 @@ class ConfigManager:
                 },
                 "notifications": {
                     "polling_rate": 60.0
+                },
+                "dns_reverse_proxy": {
+                    "reverse_proxy_provider": "caddy",
+                    "dns_provider": "opnsense",
+                    "default_domain": "",
+                    "caddy_api_url": "",
+                    "caddy_api_token": "",
+                    "caddy_verify_ssl": True,
+                    "opnsense_api_url": "",
+                    "opnsense_api_key": "",
+                    "opnsense_api_secret": "",
+                    "opnsense_verify_ssl": True,
+                    "mapping_options": {
+                        "reverse_proxy": {
+                            "hostname_mode": "route_host",
+                            "include_wildcards": False,
+                            "normalize_hostnames": True,
+                            "skip_tls_verify": False
+                        },
+                        "dns": {
+                            "hostname_mode": "host_plus_domain",
+                            "include_wildcards": False,
+                            "include_disabled": False,
+                            "normalize_hostnames": True
+                        }
+                    }
                 }
             },
         }

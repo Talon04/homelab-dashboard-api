@@ -460,12 +460,14 @@
           <input type="checkbox" class="toggle-channel" data-id="${channel.id}" ${channel.enabled ? 'checked' : ''}>
           <span>On</span>
         </label>
+        <button class="test-channel text-indigo-600 hover:text-indigo-800 text-xs" data-id="${channel.id}">Test</button>
         <button class="edit-channel text-blue-600 hover:text-blue-800 text-xs" data-id="${channel.id}">Edit</button>
         <button class="delete-channel text-red-600 hover:text-red-800 text-xs" data-id="${channel.id}">Delete</button>
       </div>
     `;
 
     div.querySelector('.toggle-channel').addEventListener('change', (e) => toggleChannel(channel.id, e.target.checked));
+    div.querySelector('.test-channel').addEventListener('click', () => testChannelDelivery(channel));
     div.querySelector('.edit-channel').addEventListener('click', () => editChannel(channel.id));
     div.querySelector('.delete-channel').addEventListener('click', () => deleteChannel(channel.id));
 
@@ -558,6 +560,35 @@
       await loadRules();
     } catch (e) {
       console.warn('Failed to delete channel:', e);
+    }
+  }
+
+  async function testChannelDelivery(channel) {
+    let customMessage = null;
+    if (channel.channel_type === 'discord' || channel.channel_type === 'webhook') {
+      customMessage = prompt('Enter a test message to send:', 'Test message from Homelab Dashboard');
+      if (customMessage === null) return;
+    }
+
+    try {
+      const res = await fetch(`/api/notifications/channels/${channel.id}/test`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: customMessage,
+          title: `Channel Test: ${channel.name}`,
+          severity: 2
+        })
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.ok) {
+        alert(data.message || 'Test delivery sent');
+      } else {
+        const errText = data.error ? `\n\nError: ${data.error}` : '';
+        alert(`${data.message || 'Test delivery failed'}${errText}`);
+      }
+    } catch (e) {
+      alert(`Test delivery failed: ${e.message}`);
     }
   }
 

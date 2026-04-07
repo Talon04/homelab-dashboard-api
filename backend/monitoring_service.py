@@ -48,7 +48,7 @@ def _get_containers_index() -> Dict[str, Dict]:
     try:
         containers: List[Dict] = docker_utils.list_containers()
     except Exception as exc:
-        print(f"[monitoring_service] Failed to list containers: {exc}")
+        print(f"ERROR [monitoring_service] Failed to list containers: {exc}")
         return {}
 
     index: Dict[str, Dict] = {}
@@ -234,7 +234,7 @@ def _monitor_loop() -> None:
         try:
             run_monitoring_cycle()
         except Exception as exc:
-            print(f"[monitoring_service] Error in monitoring cycle: {exc}")
+            print(f"ERROR [monitoring_service] Error in monitoring cycle: {exc}")
         _stop_event.wait(config_utils.get_monitoring_polling_rate())
 
 
@@ -243,12 +243,12 @@ def start_monitoring_service() -> None:
     global _worker_thread
 
     if _worker_thread is not None and _worker_thread.is_alive():
-        print("[notification_service] Service already running")
+        print("WARN [monitoring_service] Service already running")
         return
     _stop_event.clear()
     _worker_thread = threading.Thread(target=_monitor_loop, daemon=True)
     _worker_thread.start()
-    print("[notification_service] Service started")
+    print("OK [monitoring_service] Service started")
 
 
 def stop_monitoring_service() -> None:
@@ -261,7 +261,7 @@ def stop_monitoring_service() -> None:
     _stop_event.set()
     _worker_thread.join(timeout=5)
     _worker_thread = None
-    print("[monitoring_service] Service stopped")
+    print("OK [monitoring_service] Service stopped")
 
 
 def is_service_running() -> bool:

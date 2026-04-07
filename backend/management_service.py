@@ -45,7 +45,7 @@ def cleanup_old_data():
     retention_days = config_manager.get("retention_days", 30)
     
     if retention_days <= 0:
-        print("[management] Data retention disabled (retention_days <= 0)")
+        print("WARN [management] Data retention disabled (retention_days <= 0)")
         return
     
     cutoff = datetime.now() - timedelta(days=retention_days)
@@ -58,25 +58,25 @@ def cleanup_old_data():
                 deleted_points = session.query(MonitorPoints).filter(
                     MonitorPoints.timestamp < cutoff
                 ).delete()
-                print(f"[management] Deleted {deleted_points} monitoring points older than {retention_days} days")
+                print(f"OK [management] Deleted {deleted_points} monitoring points older than {retention_days} days")
             
             # Delete old events
             if Event:
                 deleted_events = session.query(Event).filter(
                     Event.timestamp < cutoff
                 ).delete()
-                print(f"[management] Deleted {deleted_events} events older than {retention_days} days")
+                print(f"OK [management] Deleted {deleted_events} events older than {retention_days} days")
             
             # Delete old event deliveries
             if EventDelivery:
                 deleted_deliveries = session.query(EventDelivery).filter(
                     EventDelivery.last_attempt < cutoff
                 ).delete()
-                print(f"[management] Deleted {deleted_deliveries} event deliveries older than {retention_days} days")
+                print(f"OK [management] Deleted {deleted_deliveries} event deliveries older than {retention_days} days")
         
-        print(f"[management] Cleanup complete - kept last {retention_days} days of data")
+        print(f"OK [management] Cleanup complete - kept last {retention_days} days of data")
     except Exception as e:
-        print(f"[management] Error during cleanup: {e}")
+        print(f"ERROR [management] Error during cleanup: {e}")
 
 
 # =============================================================================
@@ -86,7 +86,7 @@ def cleanup_old_data():
 
 def _management_worker():
     """Background worker that runs cleanup tasks daily."""
-    print("[management] Management service worker started")
+    print("INFO [management] Management service worker started")
     
     # Run cleanup immediately on startup
     cleanup_old_data()
@@ -100,7 +100,7 @@ def _management_worker():
         # Run cleanup
         cleanup_old_data()
     
-    print("[management] Management service worker stopped")
+    print("INFO [management] Management service worker stopped")
 
 
 def start_management_service():
@@ -108,13 +108,13 @@ def start_management_service():
     global _worker_thread
     
     if _worker_thread is not None and _worker_thread.is_alive():
-        print("[management] Management service already running")
+        print("WARN [management] Management service already running")
         return
     
     _stop_event.clear()
     _worker_thread = threading.Thread(target=_management_worker, daemon=True)
     _worker_thread.start()
-    print("[management] Management service started")
+    print("OK [management] Management service started")
 
 
 def stop_management_service():
@@ -122,14 +122,14 @@ def stop_management_service():
     global _worker_thread
     
     if _worker_thread is None or not _worker_thread.is_alive():
-        print("[management] Management service not running")
+        print("WARN [management] Management service not running")
         return
     
-    print("[management] Stopping management service...")
+    print("INFO [management] Stopping management service...")
     _stop_event.set()
     _worker_thread.join(timeout=5)
     _worker_thread = None
-    print("[management] Management service stopped")
+    print("OK [management] Management service stopped")
 
 
 def is_running() -> bool:

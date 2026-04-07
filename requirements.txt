@@ -4,7 +4,3 @@ python-dotenv
 gunicorn
 sqlalchemy
 alembic
-
-# Testing
-pytest
-pytest-mock

@@ -34,7 +34,7 @@ def list_containers() -> List[Dict]:
             for c in containers
         ]
     except Exception as e:
-        print(f"[docker_utils] Failed to list containers: {e}")
+        print(f"ERROR [docker_utils] Failed to list containers: {e}")
         return []
 
 
@@ -65,7 +65,7 @@ def get_container_ports(container_id: str) -> List[Dict]:
                 )
         return port_list
     except Exception as e:
-        print(f"[docker_utils] Failed to get ports for {container_id}: {e}")
+        print(f"ERROR [docker_utils] Failed to get ports for {container_id}: {e}")
         return []
 
 
@@ -83,7 +83,7 @@ def get_container_status_by_id(container_id: str) -> str:
         container = client.containers.get(container_id)
         return container.status
     except Exception as e:
-        print(f"[docker_utils] Failed to get status for {container_id}: {e}")
+        print(f"ERROR [docker_utils] Failed to get status for {container_id}: {e}")
         return "unknown"
 
 
@@ -120,5 +120,5 @@ def get_container_uptime(container_id: str) -> str:
         else:
             return f"{seconds} seconds"
     except Exception as e:
-        print(f"[docker_utils] Failed to get uptime for {container_id}: {e}")
+        print(f"ERROR [docker_utils] Failed to get uptime for {container_id}: {e}")
         return "unknown"

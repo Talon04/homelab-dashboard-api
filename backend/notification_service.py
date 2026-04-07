@@ -16,6 +16,7 @@ from typing import Dict, List, Optional, Any
 
 from backend.models import DatabaseManager, Event, EventDelivery
 from backend import config_utils
+from backend import api_helper
 from backend.config_manager import config_manager
 
 
@@ -218,9 +219,6 @@ def send_discord(channel_config: Dict, event: Event) -> Dict[str, Any]:
         {"webhook_url": "https://discord.com/api/webhooks/..."}
     """
     try:
-        import urllib.request
-        import urllib.error
-
         webhook_url = channel_config.get("webhook_url", "")
         if not webhook_url:
             return {"success": False, "error": "No webhook URL configured"}
@@ -254,24 +252,21 @@ def send_discord(channel_config: Dict, event: Event) -> Dict[str, Any]:
             ]
         }
 
-        data = json.dumps(payload).encode("utf-8")
-        req = urllib.request.Request(
+        result = api_helper.http_request(
+            "POST",
             webhook_url,
-            data=data,
             headers={"Content-Type": "application/json"},
-            method="POST",
+            data=payload,
+            timeout=10,
+            parse_json=False,
         )
+        if result.get("ok") and result.get("status") in (200, 204):
+            return {"success": True}
+        return {
+            "success": False,
+            "error": f"Discord returned status {result.get('status')}: {result.get('error') or result.get('body')}",
+        }
 
-        with urllib.request.urlopen(req, timeout=10) as response:
-            if response.status in (200, 204):
-                return {"success": True}
-            return {
-                "success": False,
-                "error": f"Discord returned status {response.status}",
-            }
-
-    except urllib.error.HTTPError as e:
-        return {"success": False, "error": f"Discord HTTP error: {e.code}"}
     except Exception as e:
         return {"success": False, "error": str(e)}
 
@@ -292,9 +287,6 @@ def send_webhook(channel_config: Dict, event: Event) -> Dict[str, Any]:
         }
     """
     try:
-        import urllib.request
-        import urllib.error
-
         url = channel_config.get("url", "")
         if not url:
             return {"success": False, "error": "No webhook URL configured"}
@@ -312,16 +304,20 @@ def send_webhook(channel_config: Dict, event: Event) -> Dict[str, Any]:
             "timestamp": event.timestamp.isoformat() if event.timestamp else None,
         }
 
-        data = json.dumps(payload).encode("utf-8")
-        req = urllib.request.Request(url, data=data, headers=headers, method=method)
-
-        with urllib.request.urlopen(req, timeout=10) as response:
-            if response.status < 300:
-                return {"success": True}
-            return {
-                "success": False,
-                "error": f"Webhook returned status {response.status}",
-            }
+        result = api_helper.http_request(
+            method,
+            url,
+            headers=headers,
+            data=payload,
+            timeout=10,
+            parse_json=False,
+        )
+        if result.get("ok") and int(result.get("status") or 0) < 300:
+            return {"success": True}
+        return {
+            "success": False,
+            "error": f"Webhook returned status {result.get('status')}: {result.get('error') or result.get('body')}",
+        }
 
     except Exception as e:
         return {"success": False, "error": str(e)}
@@ -452,7 +448,7 @@ def process_pending_events() -> int:
                     )
 
     except Exception as e:
-        print(f"[notification_service] Error processing events: {e}")
+        print(f"ERROR [notification_service] Error processing events: {e}")
         session.rollback()
     finally:
         db.close_session(session)
@@ -466,12 +462,12 @@ def _worker_loop():
         try:
             process_pending_events()
         except Exception as e:
-            print(f"[notification_service] Worker error: {e}")
+            print(f"ERROR [notification_service] Worker error: {e}")
 
         # Wait for next check interval or stop signal
         _stop_event.wait(timeout=config_utils.get_notification_polling_rate())
 
-    print("[notification_service] Worker stopped")
+    print("INFO [notification_service] Worker stopped")
 
 
 # =============================================================================
@@ -484,12 +480,12 @@ def start_notification_service():
     global _worker_thread
 
     if _worker_thread is not None and _worker_thread.is_alive():
-        print("[notification_service] Service already running")
+        print("WARN [notification_service] Service already running")
         return
     _stop_event.clear()
     _worker_thread = threading.Thread(target=_worker_loop, daemon=True)
     _worker_thread.start()
-    print("[notification_service] Service started")
+    print("OK [notification_service] Service started")
 
 
 def stop_notification_service():
@@ -502,7 +498,7 @@ def stop_notification_service():
     _stop_event.set()
     _worker_thread.join(timeout=5)
     _worker_thread = None
-    print("[notification_service] Service stopped")
+    print("OK [notification_service] Service stopped")
 
 
 def is_service_running() -> bool:

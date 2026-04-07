@@ -6,6 +6,7 @@
 from flask import Blueprint, jsonify, request
 
 import backend.config_utils as config_utils
+from backend import api_helper
 
 
 # =============================================================================
@@ -238,3 +239,26 @@ def set_module_config(module_id):
         return jsonify({"error": "Invalid or missing JSON body"}), 400
     config_utils.set_module_config(module_id, data)
     return jsonify({"message": f"Module {module_id} config updated"}), 200
+
+
+@config_bp.route("/api/config/module/<module_id>/test/<test_id>", methods=["POST"])
+def test_module_api(module_id, test_id):
+    """Run a module API connectivity/auth test using posted config overrides."""
+
+    data = request.get_json(silent=True) or {}
+    if not isinstance(data, dict):
+        return jsonify({"error": "Invalid JSON body"}), 400
+
+    # Use current persisted config as base and let unsaved UI edits override.
+    cfg = config_utils.get_module_config(module_id) or {}
+    posted_cfg = data.get("config")
+    if isinstance(posted_cfg, dict):
+        cfg = {**cfg, **posted_cfg}
+
+    result = api_helper.test_module_api(module_id, test_id, cfg)
+    status_code = 200 if result.get("ok") else 400
+    if result.get("ok"):
+        print(f"OK [config_routes] test_module_api module={module_id} test={test_id}")
+    else:
+        print(f"FAIL [config_routes] test_module_api module={module_id} test={test_id} error={result.get('error')}")
+    return jsonify(result), status_code

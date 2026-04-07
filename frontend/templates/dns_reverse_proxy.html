@@ -1,0 +1,256 @@
+{% extends "_base.html" %}
+
+{% block title %}Homelab Dashboard - DNS/Reverse Proxy{% endblock %}
+
+{% block head_extra %}
+<script>
+    document.addEventListener('DOMContentLoaded', async () => {
+        try {
+            const res = await fetch('/api/config/modules');
+            if (res.ok) {
+                const data = await res.json();
+                const enabled = Array.isArray(data.modules) ? data.modules : [];
+                if (!enabled.includes('dns_reverse_proxy')) {
+                    window.location.href = '/settings';
+                }
+            }
+        } catch (e) { }
+    });
+</script>
+{% endblock %}
+
+{% block content %}
+<div class="bg-white rounded-lg shadow-md p-6 mb-6">
+    <div class="flex items-center justify-between mb-4 gap-3">
+        <div>
+            <h2 class="text-xl font-semibold">DNS/Reverse Proxy Mapping</h2>
+            <p class="text-sm text-gray-600 mt-1">Matches reverse proxy hosts against DNS records by full hostname.</p>
+        </div>
+        <div class="flex items-center gap-2">
+            <button id="dns-rp-rp-config"
+                class="px-3 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                title="View/Edit Reverse Proxy Provider Config">
+                Reverse Proxy Config
+            </button>
+            <button id="dns-rp-dns-config"
+                class="px-3 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                title="View/Edit DNS Provider Config">
+                DNS Config
+            </button>
+            <button id="dns-rp-rp-settings"
+                class="px-2 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                title="Reverse Proxy Build Settings"
+                aria-label="Reverse Proxy Build Settings">
+                &#9881;
+            </button>
+            <button id="dns-rp-dns-settings"
+                class="px-2 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                title="DNS Build Settings"
+                aria-label="DNS Build Settings">
+                &#9881;
+            </button>
+            <button id="dns-rp-new"
+                class="px-3 py-2 bg-green-500 text-white rounded-md hover:bg-green-600 focus:outline-none focus:ring-2 focus:ring-green-500">
+                New
+            </button>
+            <button id="dns-rp-refresh"
+                class="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                Refresh
+            </button>
+        </div>
+    </div>
+
+    <div id="dns-rp-status" class="text-sm text-gray-500 mb-3">Loading mappings...</div>
+
+    <div class="overflow-x-auto">
+        <table class="min-w-full divide-y divide-gray-200">
+            <thead class="bg-gray-50">
+                <tr>
+                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Hostname</th>
+                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Reverse Proxy Target</th>
+                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">DNS Record</th>
+                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                </tr>
+            </thead>
+            <tbody id="dns-rp-table-body" class="bg-white divide-y divide-gray-200"></tbody>
+        </table>
+    </div>
+</div>
+
+<div id="dns-rp-rp-modal" class="fixed inset-0 z-50 bg-black bg-opacity-40 hidden items-center justify-center p-4">
+    <div class="bg-white rounded-lg shadow-xl w-full max-w-lg p-6">
+        <div class="flex items-center justify-between mb-4">
+            <h3 class="text-lg font-semibold">Reverse Proxy Build Settings</h3>
+            <button id="dns-rp-rp-close" class="text-gray-500 hover:text-gray-700" aria-label="Close">&times;</button>
+        </div>
+
+        <div class="space-y-4">
+            <div>
+                <label for="rp-hostname-mode" class="block text-sm font-medium text-gray-700">Hostname Source</label>
+                <select id="rp-hostname-mode" class="mt-1 w-full border border-gray-300 rounded-md px-3 py-2 text-sm">
+                    <option value="route_host">Route host matcher (recommended)</option>
+                    <option value="strict">Strict matcher only</option>
+                </select>
+            </div>
+            <div class="flex items-center gap-2">
+                <input id="rp-include-wildcards" type="checkbox" class="h-4 w-4">
+                <label for="rp-include-wildcards" class="text-sm text-gray-700">Include wildcard hostnames (e.g. *)</label>
+            </div>
+            <div class="flex items-center gap-2">
+                <input id="rp-normalize-hostnames" type="checkbox" class="h-4 w-4">
+                <label for="rp-normalize-hostnames" class="text-sm text-gray-700">Normalize hostnames (trim dots/lowercase)</label>
+            </div>
+            <div class="flex items-center gap-2">
+                <input id="rp-skip-tls-verify" type="checkbox" class="h-4 w-4">
+                <label for="rp-skip-tls-verify" class="text-sm text-gray-700">Skip upstream TLS verification for generated HTTPS proxy routes</label>
+            </div>
+        </div>
+
+        <div class="mt-6 flex justify-end gap-2">
+            <button id="dns-rp-rp-cancel" class="px-4 py-2 border border-gray-300 rounded-md text-sm">Cancel</button>
+            <button id="dns-rp-rp-save" class="px-4 py-2 bg-blue-500 text-white rounded-md text-sm">Save</button>
+        </div>
+    </div>
+</div>
+
+<div id="dns-rp-dns-modal" class="fixed inset-0 z-50 bg-black bg-opacity-40 hidden items-center justify-center p-4">
+    <div class="bg-white rounded-lg shadow-xl w-full max-w-lg p-6">
+        <div class="flex items-center justify-between mb-4">
+            <h3 class="text-lg font-semibold">DNS Build Settings</h3>
+            <button id="dns-rp-dns-close" class="text-gray-500 hover:text-gray-700" aria-label="Close">&times;</button>
+        </div>
+
+        <div class="space-y-4">
+            <div>
+                <label for="dns-hostname-mode" class="block text-sm font-medium text-gray-700">Hostname Build Mode</label>
+                <select id="dns-hostname-mode" class="mt-1 w-full border border-gray-300 rounded-md px-3 py-2 text-sm">
+                    <option value="host_plus_domain">Host + domain (recommended)</option>
+                    <option value="hostname_only">Hostname only</option>
+                </select>
+            </div>
+            <div class="flex items-center gap-2">
+                <input id="dns-include-wildcards" type="checkbox" class="h-4 w-4">
+                <label for="dns-include-wildcards" class="text-sm text-gray-700">Include wildcard hostnames (e.g. *)</label>
+            </div>
+            <div class="flex items-center gap-2">
+                <input id="dns-include-disabled" type="checkbox" class="h-4 w-4">
+                <label for="dns-include-disabled" class="text-sm text-gray-700">Include disabled records</label>
+            </div>
+            <div class="flex items-center gap-2">
+                <input id="dns-normalize-hostnames" type="checkbox" class="h-4 w-4">
+                <label for="dns-normalize-hostnames" class="text-sm text-gray-700">Normalize hostnames (trim dots/lowercase)</label>
+            </div>
+        </div>
+
+        <div class="mt-6 flex justify-end gap-2">
+            <button id="dns-rp-dns-cancel" class="px-4 py-2 border border-gray-300 rounded-md text-sm">Cancel</button>
+            <button id="dns-rp-dns-save" class="px-4 py-2 bg-blue-500 text-white rounded-md text-sm">Save</button>
+        </div>
+    </div>
+</div>
+
+<div id="dns-rp-builder-modal" class="fixed inset-0 z-50 bg-black bg-opacity-40 hidden items-center justify-center p-4">
+    <div class="bg-white rounded-lg shadow-xl w-full max-w-4xl p-6 max-h-[90vh] overflow-y-auto">
+        <div class="flex items-center justify-between mb-4">
+            <h3 class="text-lg font-semibold">Create Reverse Proxy + DNS Record</h3>
+            <button id="dns-rp-builder-close" class="text-gray-500 hover:text-gray-700" aria-label="Close">&times;</button>
+        </div>
+
+        <div id="dns-rp-builder-step-1" class="space-y-4">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                    <label for="builder-hostname" class="block text-sm font-medium text-gray-700">Hostname</label>
+                    <input id="builder-hostname" type="text" class="mt-1 w-full border border-gray-300 rounded-md px-3 py-2 text-sm" placeholder="app">
+                </div>
+                <div>
+                    <label for="builder-domain" class="block text-sm font-medium text-gray-700">Domain</label>
+                    <input id="builder-domain" type="text" class="mt-1 w-full border border-gray-300 rounded-md px-3 py-2 text-sm" placeholder="example.com">
+                </div>
+                <div>
+                    <label for="builder-target-protocol" class="block text-sm font-medium text-gray-700">Target Protocol</label>
+                    <select id="builder-target-protocol" class="mt-1 w-full border border-gray-300 rounded-md px-3 py-2 text-sm">
+                        <option value="http">http</option>
+                        <option value="https">https</option>
+                    </select>
+                </div>
+                <div>
+                    <label for="builder-target-host" class="block text-sm font-medium text-gray-700">Target Host/IP</label>
+                    <input id="builder-target-host" type="text" class="mt-1 w-full border border-gray-300 rounded-md px-3 py-2 text-sm" placeholder="192.168.1.20">
+                </div>
+                <div>
+                    <label for="builder-target-port" class="block text-sm font-medium text-gray-700">Target Port</label>
+                    <input id="builder-target-port" type="number" class="mt-1 w-full border border-gray-300 rounded-md px-3 py-2 text-sm" placeholder="80">
+                </div>
+                <div>
+                    <label for="builder-dns-record-type" class="block text-sm font-medium text-gray-700">DNS Record Type</label>
+                    <select id="builder-dns-record-type" class="mt-1 w-full border border-gray-300 rounded-md px-3 py-2 text-sm">
+                        <option value="A">A</option>
+                        <option value="AAAA">AAAA</option>
+                        <option value="MX">MX</option>
+                        <option value="TXT">TXT</option>
+                    </select>
+                </div>
+                <div class="md:col-span-2">
+                    <label for="builder-dns-record-value" class="block text-sm font-medium text-gray-700">DNS Record Value</label>
+                    <input id="builder-dns-record-value" type="text" class="mt-1 w-full border border-gray-300 rounded-md px-3 py-2 text-sm" placeholder="192.168.1.23">
+                </div>
+            </div>
+        </div>
+
+        <div id="dns-rp-builder-step-2" class="hidden space-y-4">
+            <p class="text-sm text-gray-600">Review and edit generated payloads before sending.</p>
+            <div>
+                <label for="builder-rp-payload" class="block text-sm font-medium text-gray-700">Reverse Proxy API Payload</label>
+                <textarea id="builder-rp-payload" class="mt-1 w-full border border-gray-300 rounded-md px-3 py-2 text-sm font-mono" rows="12"></textarea>
+            </div>
+            <div>
+                <label for="builder-dns-payload" class="block text-sm font-medium text-gray-700">DNS API Payload</label>
+                <textarea id="builder-dns-payload" class="mt-1 w-full border border-gray-300 rounded-md px-3 py-2 text-sm font-mono" rows="12"></textarea>
+            </div>
+        </div>
+
+        <div class="mt-6 flex justify-between gap-2">
+            <button id="dns-rp-builder-back" class="px-4 py-2 border border-gray-300 rounded-md text-sm hidden">Back</button>
+            <div class="ml-auto flex gap-2">
+                <button id="dns-rp-builder-cancel" class="px-4 py-2 border border-gray-300 rounded-md text-sm">Cancel</button>
+                <button id="dns-rp-builder-next" class="px-4 py-2 bg-blue-500 text-white rounded-md text-sm">Next</button>
+                <button id="dns-rp-builder-send" class="px-4 py-2 bg-green-500 text-white rounded-md text-sm hidden">Send</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="dns-rp-edit-modal" class="fixed inset-0 z-50 bg-black bg-opacity-40 hidden items-center justify-center p-4">
+    <div class="bg-white rounded-lg shadow-xl w-full max-w-2xl p-6">
+        <div class="flex items-center justify-between mb-4">
+            <h3 id="dns-rp-edit-title" class="text-lg font-semibold">Edit Mapping Part</h3>
+            <button id="dns-rp-edit-close" class="text-gray-500 hover:text-gray-700" aria-label="Close">&times;</button>
+        </div>
+        <p id="dns-rp-edit-description" class="text-sm text-gray-600 mb-3"></p>
+        <textarea id="dns-rp-edit-payload" class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm font-mono" rows="14"></textarea>
+        <div class="mt-4 flex justify-end gap-2">
+            <button id="dns-rp-edit-cancel" class="px-4 py-2 border border-gray-300 rounded-md text-sm">Cancel</button>
+            <button id="dns-rp-edit-save" class="px-4 py-2 bg-blue-500 text-white rounded-md text-sm">Save</button>
+        </div>
+    </div>
+</div>
+
+<div id="dns-rp-rp-config-modal" class="fixed inset-0 z-50 bg-black bg-opacity-40 hidden items-center justify-center p-4">
+    <div class="bg-white rounded-lg shadow-xl w-full max-w-4xl p-6 max-h-[90vh] overflow-y-auto">
+        <div class="flex items-center justify-between mb-4">
+            <h3 class="text-lg font-semibold">Reverse Proxy Caddyfile</h3>
+            <button id="dns-rp-rp-config-close" class="text-gray-500 hover:text-gray-700" aria-label="Close">&times;</button>
+        </div>
+        <textarea id="dns-rp-rp-config-text" class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm font-mono" rows="20"></textarea>
+        <div class="mt-4 flex justify-end gap-2">
+            <button id="dns-rp-rp-config-cancel" class="px-4 py-2 border border-gray-300 rounded-md text-sm">Cancel</button>
+            <button id="dns-rp-rp-config-save" class="px-4 py-2 bg-blue-500 text-white rounded-md text-sm">Save</button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/dns_reverse_proxy.js" defer></script>
+{% endblock %}

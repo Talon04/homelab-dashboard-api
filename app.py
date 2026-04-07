@@ -25,6 +25,7 @@ from backend.routes_bps.code_routes import code_bp
 from backend.routes_bps.monitor_routes import monitor_bp
 from backend.routes_bps.event_routes import event_bp
 from backend.routes_bps.notification_routes import notification_bp
+from backend.routes_bps.dns_reverse_proxy_routes import dns_reverse_proxy_bp
 
 
 app = Flask(
@@ -64,19 +65,19 @@ def init_database():
 
         if tables and not has_alembic_version:
             # Existing database without migrations - stamp it with initial revision
-            print("[app] Existing database detected without version info")
-            print("[app] Stamping database with initial revision")
+            print("INFO [app] Existing database detected without version info")
+            print("INFO [app] Stamping database with initial revision")
             command.stamp(alembic_cfg, "head")
         else:
             # Database has version info or is empty - run normal upgrade
-            print("[app] Running database migrations")
+            print("INFO [app] Running database migrations")
             command.upgrade(alembic_cfg, "head")
     else:
         # New database - run migrations to create schema
-        print("[app] Initializing new database with migrations")
+        print("INFO [app] Initializing new database with migrations")
         command.upgrade(alembic_cfg, "head")
 
-    print("[app] Database initialization complete")
+    print("INFO [app] Database initialization complete")
 
 
 # =============================================================================
@@ -88,27 +89,27 @@ def start_background_tasks():
     """Start all background services on app startup."""
     try:
         start_management_service()
-        print("[app] Management service started")
+        print("OK [app] Management service started")
     except Exception as e:
-        print(f"[app] Failed to start management service: {e}")
+        print(f"ERROR [app] Failed to start management service: {e}")
 
     try:
         start_widget_scheduler()
-        print("[app] Widget scheduler started")
+        print("OK [app] Widget scheduler started")
     except Exception as e:
-        print(f"[app] Failed to start widget scheduler: {e}")
+        print(f"ERROR [app] Failed to start widget scheduler: {e}")
 
     try:
         start_monitoring_service()
-        print("[app] Monitoring service started")
+        print("OK [app] Monitoring service started")
     except Exception as e:
-        print(f"[app] Failed to start monitoring service: {e}")
+        print(f"ERROR [app] Failed to start monitoring service: {e}")
 
     try:
         start_notification_service()
-        print("[app] Event delivery service started")
+        print("OK [app] Event delivery service started")
     except Exception as e:
-        print(f"[app] Failed to start event delivery service: {e}")
+        print(f"ERROR [app] Failed to start event delivery service: {e}")
 
 
 # =============================================================================
@@ -145,3 +146,4 @@ app.register_blueprint(code_bp)
 app.register_blueprint(monitor_bp)
 app.register_blueprint(event_bp)
 app.register_blueprint(notification_bp)
+app.register_blueprint(dns_reverse_proxy_bp)

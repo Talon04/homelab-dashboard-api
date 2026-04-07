@@ -45,7 +45,7 @@ def _run_python_widget(widget: Dict) -> None:
 
     container_id = widget.get("container_id")
     if not container_id:
-        print("[task_scheduler] Widget missing container_id; skipping")
+        print("WARN [widget_service] Widget missing container_id; skipping")
         return
 
     widget_id = int(widget.get("id"))

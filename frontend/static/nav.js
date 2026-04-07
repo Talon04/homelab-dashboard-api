@@ -44,6 +44,7 @@
       case 'proxmox': return { href: '/proxmox', label: 'Proxmox' };
       case 'code_editor': return { href: '/code', label: 'Code' };
       case 'monitor': return { href: '/monitor', label: 'Monitor' };
+      case 'dns_reverse_proxy': return { href: '/dns-reverse-proxy', label: 'DNS/Proxy' };
       default: return null;
     }
   }
@@ -57,7 +58,7 @@
     const left = { href: null, label: null };
     const right = { href: null, label: null };
 
-    const pages = ['settings', ...enabledOrdered];
+    const pages = ['settings', ...enabledOrdered.filter(id => !!mapModule(id))];
     if (!pages.length) {
       return { left, right };
     }
@@ -95,6 +96,7 @@
     if (path.startsWith('/proxmox')) return 'proxmox';
     if (path.startsWith('/code')) return 'code_editor';
     if (path.startsWith('/monitor')) return 'monitor';
+    if (path.startsWith('/dns-reverse-proxy')) return 'dns_reverse_proxy';
     return 'settings';
   }
 

@@ -72,3 +72,14 @@ def code_editor_page():
 
         return redirect(url_for("pages.settings"))
     return render_template("code_editor.html")
+
+
+@pages_bp.route("/dns-reverse-proxy")
+def dns_reverse_proxy_page():
+    """DNS/Reverse Proxy page (gated by enabled modules)."""
+    modules = config_utils.get_enabled_modules()
+    if not modules or "dns_reverse_proxy" not in modules:
+        from flask import redirect, url_for
+
+        return redirect(url_for("pages.settings"))
+    return render_template("dns_reverse_proxy.html")
