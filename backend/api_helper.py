@@ -19,7 +19,7 @@ from urllib.parse import urlparse
 from typing import Any, Dict, List, Optional
 from urllib import error, request
 
-from backend import config_utils
+from backend import config_utils, proxy_service_client
 
 
 def http_request(
@@ -118,14 +118,6 @@ def _safe_call(fn, fallback):
         return fallback
 
 
-def _response_for_log(result: Dict[str, Any]) -> str:
-    """Best-effort serializer for temporary full-response debugging logs."""
-    try:
-        return json.dumps(result, default=str)
-    except Exception:
-        return str(result)
-
-
 def _join_host_domain(host: str, domain: str) -> str:
     host = (host or "").strip().rstrip(".")
     domain = (domain or "").strip().rstrip(".")
@@ -216,28 +208,16 @@ def _get_mapping_options(cfg: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def _get_reverse_proxy_entries_caddy(cfg: Dict[str, Any]) -> List[Dict[str, Any]]:
-    base_url = str(cfg.get("caddy_api_url") or "").strip().rstrip("/")
-    token = str(cfg.get("caddy_api_token") or "").strip()
-    verify_ssl = bool(cfg.get("caddy_verify_ssl", True))
-    if not base_url:
-        print("ERROR [dns_reverse_proxy] caddy reverse proxy: missing caddy_api_url")
-        return []
+    # Proxy service handles the API interaction. This function processes the response.
+    fetch_result = proxy_service_client.fetch_config(cfg)
+    if not fetch_result.get("ok"):
+        print(f"ERROR [dns_reverse_proxy] reverse proxy: {fetch_result.get('error')}")
+        raise RuntimeError(fetch_result.get("error"))
 
-    print(f"INFO [dns_reverse_proxy] caddy reverse proxy: fetching config from {base_url}/config/")
-    headers: Dict[str, str] = {"Accept": "application/json"}
-    if token:
-        headers["Authorization"] = f"Bearer {token}"
-
-    result = http_request("GET", f"{base_url}/config/", headers=headers, parse_json=True, verify_ssl=verify_ssl)
-    print(f"INFO [dns_reverse_proxy] TEMP caddy full response: {_response_for_log(result)}")
-    if not result["ok"]:
-        msg = f"Caddy API error: endpoint={base_url}/config/ status={result.get('status')} error={result.get('error')}"
-        print(f"ERROR [dns_reverse_proxy] caddy reverse proxy: {msg}")
-        raise RuntimeError(msg)
-
-    payload = result.get("json")
+    payload = fetch_result.get("config") or {}
     if not isinstance(payload, dict):
         payload = {}
+    
     options = _get_mapping_options(cfg)
     entries = _extract_caddy_reverse_proxy_entries(payload)
 
@@ -255,7 +235,6 @@ def _get_reverse_proxy_entries_caddy(cfg: Dict[str, Any]) -> List[Dict[str, Any]
         filtered.append(fixed)
 
     entries = filtered
-    print(f"INFO [dns_reverse_proxy] caddy reverse proxy: extracted {len(entries)} entries")
     return entries
 
 
@@ -317,14 +296,6 @@ def _extract_host_from_url(url: str) -> str:
         return str(parsed.hostname or "").strip()
     except Exception:
         return ""
-
-
-def _build_caddy_headers(cfg: Dict[str, Any]) -> Dict[str, str]:
-    headers: Dict[str, str] = {"Accept": "application/json"}
-    token = str(cfg.get("caddy_api_token") or "").strip()
-    if token:
-        headers["Authorization"] = f"Bearer {token}"
-    return headers
 
 
 def _build_opnsense_headers(cfg: Dict[str, Any]) -> Dict[str, str]:
@@ -454,15 +425,20 @@ def send_dns_reverse_proxy_payloads(reverse_proxy_payload: Any, dns_payload: Any
     caddy_verify_ssl = bool(cfg.get("caddy_verify_ssl", True))
     opnsense_verify_ssl = bool(cfg.get("opnsense_verify_ssl", True))
 
+    # Build Caddy API headers
+    caddy_headers: Dict[str, str] = {"Accept": "application/json"}
+    caddy_token = str(cfg.get("caddy_api_token") or "").strip()
+    if caddy_token:
+        caddy_headers["Authorization"] = f"Bearer {caddy_token}"
+
     # Resolve server id dynamically, then append new route.
     cfg_result = http_request(
         "GET",
         f"{caddy_base}/config/",
-        headers=_build_caddy_headers(cfg),
+        headers=caddy_headers,
         parse_json=True,
         verify_ssl=caddy_verify_ssl,
     )
-    print(f"INFO [dns_reverse_proxy] TEMP caddy builder read config response: {_response_for_log(cfg_result)}")
     if not cfg_result.get("ok"):
         return {"ok": False, "error": f"Failed reading Caddy config: {cfg_result.get('error') or cfg_result.get('body')}"}
 
@@ -475,12 +451,11 @@ def send_dns_reverse_proxy_payloads(reverse_proxy_payload: Any, dns_payload: Any
     rp_result = http_request(
         "POST",
         f"{caddy_base}/config/apps/http/servers/{server_id}/routes",
-        headers={**_build_caddy_headers(cfg), "Content-Type": "application/json"},
+        headers={**caddy_headers, "Content-Type": "application/json"},
         data=reverse_proxy_payload,
         parse_json=True,
         verify_ssl=caddy_verify_ssl,
     )
-    print(f"INFO [dns_reverse_proxy] TEMP caddy builder send response: {_response_for_log(rp_result)}")
     if not rp_result.get("ok"):
         return {"ok": False, "error": f"Caddy create failed: {rp_result.get('error') or rp_result.get('body')}"}
 
@@ -492,7 +467,6 @@ def send_dns_reverse_proxy_payloads(reverse_proxy_payload: Any, dns_payload: Any
         parse_json=True,
         verify_ssl=opnsense_verify_ssl,
     )
-    print(f"INFO [dns_reverse_proxy] TEMP opnsense builder send response: {_response_for_log(dns_result)}")
     if not dns_result.get("ok"):
         return {"ok": False, "error": f"OPNsense add_host_override failed: {dns_result.get('error') or dns_result.get('body')}"}
 
@@ -505,7 +479,6 @@ def send_dns_reverse_proxy_payloads(reverse_proxy_payload: Any, dns_payload: Any
         parse_json=True,
         verify_ssl=opnsense_verify_ssl,
     )
-    print(f"INFO [dns_reverse_proxy] TEMP opnsense reconfigure response: {_response_for_log(reconfigure_result)}")
 
     return {
         "ok": True,
@@ -554,7 +527,6 @@ def _get_dns_entries_opnsense(cfg: Dict[str, Any]) -> List[Dict[str, Any]]:
             parse_json=True,
             verify_ssl=verify_ssl,
         )
-        print(f"INFO [dns_reverse_proxy] TEMP opnsense full response endpoint={endpoint}: {_response_for_log(result)}")
         if result["ok"]:
             rows = _normalize_opnsense_rows(result.get("json"))
             if rows:
@@ -813,42 +785,12 @@ def _parse_caddyfile_like_blocks(config_text: str) -> List[Dict[str, str]]:
     return blocks
 
 
-def _fetch_caddy_config(cfg: Dict[str, Any]) -> Dict[str, Any]:
-    base_url = str(cfg.get("caddy_api_url") or "").strip().rstrip("/")
-    if not base_url:
-        return {"ok": False, "error": "caddy_api_url is required"}
-    result = http_request(
-        "GET",
-        f"{base_url}/config/",
-        headers=_build_caddy_headers(cfg),
-        parse_json=True,
-        verify_ssl=bool(cfg.get("caddy_verify_ssl", True)),
-    )
-    print(f"INFO [dns_reverse_proxy] TEMP caddy fetch config response: {_response_for_log(result)}")
-    if not result.get("ok"):
-        return {"ok": False, "error": result.get("error") or result.get("body") or "Failed to fetch Caddy config"}
-    payload = result.get("json")
-    if not isinstance(payload, dict):
-        payload = {}
-    return {"ok": True, "config": payload}
-
-
-def _save_caddy_config(cfg: Dict[str, Any], payload: Any) -> Dict[str, Any]:
-    base_url = str(cfg.get("caddy_api_url") or "").strip().rstrip("/")
-    if not base_url:
-        return {"ok": False, "error": "caddy_api_url is required"}
-    result = http_request(
-        "POST",
-        f"{base_url}/load",
-        headers={**_build_caddy_headers(cfg), "Content-Type": "application/json"},
-        data=payload,
-        parse_json=True,
-        verify_ssl=bool(cfg.get("caddy_verify_ssl", True)),
-    )
-    print(f"INFO [dns_reverse_proxy] TEMP caddy save config response: {_response_for_log(result)}")
-    if not result.get("ok"):
-        return {"ok": False, "error": result.get("error") or result.get("body") or "Failed to save Caddy config"}
-    return {"ok": True, "result": result}
+def _get_reverse_proxy_provider_config_caddy(cfg: Dict[str, Any]) -> Dict[str, Any]:
+    """Fetch and parse Caddy configuration for editing."""
+    fetch_result = proxy_service_client.fetch_config(cfg)
+    if not fetch_result.get("ok"):
+        return {"ok": False, "error": fetch_result.get("error")}
+    return {"ok": True, "config": fetch_result.get("config") or {}}
 
 
 def _update_caddy_reverse_proxy_targets(caddy_config: Dict[str, Any], updates: List[Dict[str, str]]) -> int:
@@ -927,7 +869,6 @@ def _delete_opnsense_dns_entry(cfg: Dict[str, Any], hostname: str) -> Dict[str, 
         parse_json=True,
         verify_ssl=verify_ssl,
     )
-    print(f"INFO [dns_reverse_proxy] TEMP opnsense delete response: {_response_for_log(delete_result)}")
     if not delete_result.get("ok"):
         return {"ok": False, "error": delete_result.get("error") or delete_result.get("body") or "DNS delete failed"}
 
@@ -939,7 +880,6 @@ def _delete_opnsense_dns_entry(cfg: Dict[str, Any], hostname: str) -> Dict[str, 
         parse_json=True,
         verify_ssl=verify_ssl,
     )
-    print(f"INFO [dns_reverse_proxy] TEMP opnsense reconfigure response: {_response_for_log(reconfigure_result)}")
 
     return {"ok": True, "result": delete_result, "reconfigure": reconfigure_result}
 
@@ -956,10 +896,10 @@ def delete_mapping_parts(hostname: str) -> Dict[str, Any]:
     out: Dict[str, Any] = {"ok": True, "hostname": normalized, "reverse_proxy": {}, "dns": {}}
 
     if rp_provider == "caddy":
-        caddy_result = _fetch_caddy_config(cfg)
-        if not caddy_result.get("ok"):
-            return {"ok": False, "error": f"Failed reading reverse proxy config: {caddy_result.get('error')}"}
-        config_obj = caddy_result.get("config") or {}
+        fetch_result = proxy_service_client.fetch_config(cfg)
+        if not fetch_result.get("ok"):
+            return {"ok": False, "error": f"Failed reading reverse proxy config: {fetch_result.get('error')}"}
+        config_obj = fetch_result.get("config") or {}
         servers = ((((config_obj.get("apps") or {}).get("http") or {}).get("servers") or {}))
         removed_count = 0
         if isinstance(servers, dict):
@@ -978,7 +918,7 @@ def delete_mapping_parts(hostname: str) -> Dict[str, Any]:
                 server_data["routes"] = kept
 
         if removed_count > 0:
-            save_result = _save_caddy_config(cfg, config_obj)
+            save_result = proxy_service_client.save_config(cfg, config_obj)
             if not save_result.get("ok"):
                 return {"ok": False, "error": f"Failed saving reverse proxy config: {save_result.get('error')}"}
             out["reverse_proxy"] = {"ok": True, "removed": removed_count}
@@ -1013,7 +953,7 @@ def edit_reverse_proxy_mapping(hostname: str, target_protocol: str, target_host:
     if rp_provider != "caddy":
         return {"ok": False, "error": f"Unsupported reverse proxy provider: {rp_provider}"}
 
-    fetch_result = _fetch_caddy_config(cfg)
+    fetch_result = proxy_service_client.fetch_config(cfg)
     if not fetch_result.get("ok"):
         return {"ok": False, "error": fetch_result.get("error")}
     config_obj = fetch_result.get("config") or {}
@@ -1048,7 +988,7 @@ def edit_reverse_proxy_mapping(hostname: str, target_protocol: str, target_host:
     if updated == 0:
         return {"ok": False, "error": "Reverse proxy route not found for hostname"}
 
-    save_result = _save_caddy_config(cfg, config_obj)
+    save_result = proxy_service_client.save_config(cfg, config_obj)
     if not save_result.get("ok"):
         return {"ok": False, "error": save_result.get("error")}
     return {"ok": True, "updated": updated, "dial": dial}
@@ -1103,7 +1043,6 @@ def edit_dns_mapping(hostname: str, record_type: str, record_value: str) -> Dict
         parse_json=True,
         verify_ssl=verify_ssl,
     )
-    print(f"INFO [dns_reverse_proxy] TEMP opnsense set response: {_response_for_log(set_result)}")
     if not set_result.get("ok"):
         return {"ok": False, "error": set_result.get("error") or set_result.get("body") or "DNS update failed"}
 
@@ -1115,7 +1054,6 @@ def edit_dns_mapping(hostname: str, record_type: str, record_value: str) -> Dict
         parse_json=True,
         verify_ssl=verify_ssl,
     )
-    print(f"INFO [dns_reverse_proxy] TEMP opnsense reconfigure response: {_response_for_log(reconfigure_result)}")
     return {"ok": True, "result": set_result, "reconfigure": reconfigure_result}
 
 
@@ -1124,7 +1062,7 @@ def get_reverse_proxy_provider_config() -> Dict[str, Any]:
     cfg = config_utils.get_module_config("dns_reverse_proxy") or {}
     rp_provider = str(cfg.get("reverse_proxy_provider") or "").strip().lower()
     if rp_provider == "caddy":
-        fetch_result = _fetch_caddy_config(cfg)
+        fetch_result = proxy_service_client.fetch_config(cfg)
         if not fetch_result.get("ok"):
             return {"ok": False, "error": fetch_result.get("error")}
         payload = fetch_result.get("config") or {}
@@ -1142,7 +1080,7 @@ def save_reverse_proxy_provider_config(config_text: str) -> Dict[str, Any]:
     rp_provider = str(cfg.get("reverse_proxy_provider") or "").strip().lower()
     if rp_provider != "caddy":
         return {"ok": False, "error": f"Unsupported reverse proxy provider: {rp_provider}"}
-    fetch_result = _fetch_caddy_config(cfg)
+    fetch_result = proxy_service_client.fetch_config(cfg)
     if not fetch_result.get("ok"):
         return {"ok": False, "error": fetch_result.get("error")}
 
@@ -1155,7 +1093,7 @@ def save_reverse_proxy_provider_config(config_text: str) -> Dict[str, Any]:
     if changed == 0:
         return {"ok": False, "error": "No matching Caddy reverse proxy routes were updated"}
 
-    return _save_caddy_config(cfg, payload)
+    return proxy_service_client.save_config(cfg, payload)
 
 
 def get_dns_provider_config_link() -> Dict[str, Any]:
@@ -1257,7 +1195,6 @@ def test_caddy_api(cfg: Dict[str, Any]) -> Dict[str, Any]:
         parse_json=True,
         verify_ssl=verify_ssl,
     )
-    print(f"INFO [api_helper] TEMP caddy test full response: {_response_for_log(result)}")
 
     if result.get("ok"):
         out = {
@@ -1326,7 +1263,6 @@ def test_opnsense_api(cfg: Dict[str, Any]) -> Dict[str, Any]:
             parse_json=True,
             verify_ssl=verify_ssl,
         )
-        print(f"INFO [api_helper] TEMP opnsense test full response endpoint={endpoint}: {_response_for_log(result)}")
         if result.get("ok"):
             out = {
                 "ok": True,

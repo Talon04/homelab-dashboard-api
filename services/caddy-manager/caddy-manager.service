@@ -1,0 +1,37 @@
+[Unit]
+Description=Caddy Manager - Caddyfile staging and validation service
+Documentation=file:///opt/caddy-manager/README.md
+After=caddy.service
+Wants=caddy.service
+
+[Service]
+Type=simple
+User=caddy
+Group=caddy
+WorkingDirectory=/opt/caddy-manager
+
+Environment="CADDYFILE_PATH=/etc/caddy/Caddyfile"
+Environment="CADDY_MANAGER_DATA=/var/lib/caddy-manager"
+Environment="CADDY_RELOAD_CMD=systemctl reload caddy"
+Environment="PORT=9999"
+Environment="DEBUG=false"
+
+ExecStart=/opt/caddy-manager/venv/bin/python app.py
+
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=caddy-manager
+
+# Security hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+SecureBits=keep-caps
+CapabilityBoundingSet=
+
+[Install]
+WantedBy=multi-user.target
