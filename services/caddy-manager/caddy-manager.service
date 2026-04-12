@@ -16,7 +16,7 @@ Environment="CADDY_RELOAD_CMD=systemctl reload caddy"
 Environment="PORT=9999"
 Environment="DEBUG=false"
 
-ExecStart=/opt/caddy-manager/venv/bin/python app.py
+ExecStart=/usr/bin/python3 app.py
 
 Restart=always
 RestartSec=5

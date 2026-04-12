@@ -88,6 +88,40 @@ check_user_exists() {
     fi
 }
 
+detect_os() {
+    if [ -f /etc/os-release ]; then
+        . /etc/os-release
+        echo "$ID"
+    elif [ -f /etc/redhat-release ]; then
+        echo "rhel"
+    elif [ -f /etc/debian_version ]; then
+        echo "debian"
+    else
+        echo "unknown"
+    fi
+}
+
+install_python_packages() {
+    local os=$(detect_os)
+    
+    log_info "Installing Python packages for $os..."
+    
+    case "$os" in
+        ubuntu|debian)
+            apt-get update
+            apt-get install -y python3-flask python3-werkzeug
+            ;;
+        fedora|rhel|centos)
+            dnf install -y python3-flask python3-werkzeug || yum install -y python3-flask python3-werkzeug
+            ;;
+        *)
+            log_error "Unsupported OS: $os"
+            log_info "Please manually install: Flask and Werkzeug"
+            exit 1
+            ;;
+    esac
+}
+
 # =============================================================================
 # MAIN
 # =============================================================================
@@ -137,6 +171,10 @@ main() {
     check_command python3
     check_command git
     check_command systemctl
+    
+    # Install system Python packages
+    log_info "Installing system Python packages..."
+    install_python_packages
     
     # Check if caddy binary exists
     if ! command -v caddy &> /dev/null; then
