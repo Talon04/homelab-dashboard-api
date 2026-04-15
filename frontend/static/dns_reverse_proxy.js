@@ -528,10 +528,7 @@
         const res = await fetch('/api/dns-reverse-proxy/builder/send', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            reverse_proxy_payload_text: rpPayloadEl.value,
-            dns_payload_text: dnsPayloadEl.value,
-          }),
+          body: JSON.stringify(getBuilderInput()),
         });
         const data = await res.json();
         if (!res.ok || !data.ok) {

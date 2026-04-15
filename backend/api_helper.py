@@ -19,7 +19,7 @@ from urllib.parse import urlparse
 from typing import Any, Dict, List, Optional
 from urllib import error, request
 
-from backend import config_utils, proxy_service_client
+from backend import config_utils, caddy_agent_client
 
 
 def http_request(
@@ -185,6 +185,91 @@ def _extract_caddy_reverse_proxy_entries(caddy_config: Dict[str, Any]) -> List[D
     return entries
 
 
+def _extract_caddy_reverse_proxy_entries_from_caddyfile_text(caddyfile_text: str) -> List[Dict[str, Any]]:
+    """Parse raw Caddyfile text and extract reverse proxy entries.
+    
+    Handles multi-line blocks like:
+        hostname.example.com {
+            reverse_proxy 192.168.1.1:8080 {
+                ...
+            }
+        }
+    """
+    entries: List[Dict[str, Any]] = []
+    
+    if not isinstance(caddyfile_text, str):
+        return entries
+    
+    lines = caddyfile_text.split("\n")
+    current_hostname = None
+    block_depth = 0
+    
+    # Keywords that start a non-hostname block
+    non_hostname_keywords = {
+        "import", "basic_auth", "header", "transport", "tls", "admin", 
+        "log", "respond", "request_body", "reverse_proxy", "global",
+        "encode", "rewrite", "file", "uri", "query", "method", "protocol"
+    }
+    
+    for line in lines:
+        stripped = line.strip()
+        
+        # Skip empty lines and comments
+        if not stripped or stripped.startswith("#"):
+            continue
+        
+        # Skip snippet definitions (lines starting with parenthesis)
+        if stripped.startswith("("):
+            open_braces = stripped.count("{")
+            close_braces = stripped.count("}")
+            block_depth += open_braces - close_braces
+            continue
+        
+        # Update block depth based on braces
+        open_braces = stripped.count("{")
+        close_braces = stripped.count("}")
+        
+        # Try to identify hostname block entry (when at depth 0 and opening a block)
+        if block_depth == 0 and open_braces > close_braces:
+            # Extract first token before {
+            first_token = stripped.split("{")[0].strip().split()[0] if stripped.split("{")[0].strip() else ""
+            
+            # Check if it's a known non-hostname keyword
+            if first_token and first_token.lower() not in non_hostname_keywords:
+                current_hostname = stripped.split("{")[0].strip()
+            
+            block_depth += open_braces - close_braces
+        elif block_depth > 0:
+            # We're inside a block
+            block_depth += open_braces - close_braces
+            
+            # Look for reverse_proxy directives
+            if "reverse_proxy" in stripped and current_hostname:
+                parts = stripped.split("reverse_proxy", 1)
+                if len(parts) > 1:
+                    target_part = parts[1].strip()
+                    # Remove trailing { and anything after (for nested blocks)
+                    target_part = target_part.split("{")[0].strip()
+                    target_part = target_part.rstrip(";").strip()
+                    
+                    if target_part:
+                        entries.append({
+                            "hostname": current_hostname,
+                            "target": target_part,
+                            "source": "caddy",
+                            "raw": stripped,
+                        })
+            
+            # Check if we're exiting the hostname block
+            if block_depth == 0:
+                current_hostname = None
+        else:
+            # Update global depth when outside hostname blocks
+            block_depth += open_braces - close_braces
+    
+    return entries
+
+
 def _get_mapping_options(cfg: Dict[str, Any]) -> Dict[str, Any]:
     options = cfg.get("mapping_options")
     if not isinstance(options, dict):
@@ -208,18 +293,25 @@ def _get_mapping_options(cfg: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def _get_reverse_proxy_entries_caddy(cfg: Dict[str, Any]) -> List[Dict[str, Any]]:
-    # Proxy service handles the API interaction. This function processes the response.
-    fetch_result = proxy_service_client.fetch_config(cfg)
+    # Caddy Agent handles the API interaction. This function processes the response.
+    fetch_result = caddy_agent_client.fetch_config(cfg)
     if not fetch_result.get("ok"):
         print(f"ERROR [dns_reverse_proxy] reverse proxy: {fetch_result.get('error')}")
         raise RuntimeError(fetch_result.get("error"))
 
     payload = fetch_result.get("config") or {}
-    if not isinstance(payload, dict):
-        payload = {}
     
     options = _get_mapping_options(cfg)
-    entries = _extract_caddy_reverse_proxy_entries(payload)
+    
+    # Handle both Caddyfile text (string) and JSON config (dict)
+    if isinstance(payload, str):
+        # Parse raw Caddyfile text
+        entries = _extract_caddy_reverse_proxy_entries_from_caddyfile_text(payload)
+    elif isinstance(payload, dict):
+        # Parse JSON config
+        entries = _extract_caddy_reverse_proxy_entries(payload)
+    else:
+        entries = []
 
     filtered: List[Dict[str, Any]] = []
     for entry in entries:
@@ -314,7 +406,7 @@ def get_dns_reverse_proxy_builder_defaults() -> Dict[str, Any]:
     """Return prefill values used by the DNS/Reverse Proxy builder modal."""
     cfg = config_utils.get_module_config("dns_reverse_proxy") or {}
     default_domain = str(cfg.get("default_domain") or "").strip().lstrip(".")
-    proxy_ip = _extract_host_from_url(str(cfg.get("caddy_api_url") or "").strip())
+    proxy_host = str(cfg.get("caddy_agent_host") or "").strip()
 
     return {
         "hostname": "",
@@ -323,7 +415,7 @@ def get_dns_reverse_proxy_builder_defaults() -> Dict[str, Any]:
         "target_host": "",
         "target_port": 80,
         "dns_record_type": "A",
-        "dns_record_value": proxy_ip,
+        "dns_record_value": proxy_host,
     }
 
 
@@ -359,21 +451,9 @@ def build_dns_reverse_proxy_preview(data: Dict[str, Any]) -> Dict[str, Any]:
     if options["dns"]["normalize_hostnames"]:
         dns_hostname = dns_hostname.rstrip(".").lower()
 
-    caddy_route: Dict[str, Any] = {
-        "match": [{"host": [caddy_host]}],
-        "handle": [
-            {
-                "handler": "reverse_proxy",
-                "upstreams": [{"dial": f"{target_host}:{target_port}"}],
-            }
-        ],
-        "terminal": True,
-    }
-    if target_protocol == "https" and options["reverse_proxy"]["skip_tls_verify"]:
-        caddy_route["handle"][0]["transport"] = {
-            "protocol": "http",
-            "tls": {"insecure_skip_verify": True},
-        }
+    # Build Caddyfile text format for reverse proxy
+    dial = f"{target_host}:{target_port}"
+    caddyfile_block = f"\n{caddy_host} {{\n    reverse_proxy {dial}\n}}\n"
 
     dns_record = {
         "enabled": "1",
@@ -397,15 +477,74 @@ def build_dns_reverse_proxy_preview(data: Dict[str, Any]) -> Dict[str, Any]:
             "caddy_host": caddy_host,
             "dns_hostname": dns_hostname,
         },
-        "reverse_proxy_payload": caddy_route,
+        "reverse_proxy_payload": caddyfile_block,
         "dns_payload": dns_record,
-        "reverse_proxy_payload_text": json.dumps(caddy_route, indent=2),
+        "reverse_proxy_payload_text": caddyfile_block,
         "dns_payload_text": json.dumps(dns_record, indent=2),
     }
 
 
+def _append_caddyfile_reverse_proxy_block(caddyfile_text: str, hostname: str, target: str) -> str:
+    """Append a new reverse_proxy block to Caddyfile text.
+    
+    Ensures the Caddyfile ends with a newline before appending.
+    """
+    # Ensure the text ends with a newline before appending
+    if caddyfile_text and not caddyfile_text.endswith("\n"):
+        caddyfile_text += "\n"
+    
+    # Generate new block with proper formatting
+    new_block = f"\n{hostname} {{\n    reverse_proxy {target}\n}}\n"
+    return caddyfile_text + new_block
+
+
+def _remove_caddyfile_reverse_proxy_block(caddyfile_text: str, hostname: str) -> tuple[str, int]:
+    """Remove reverse_proxy blocks for a hostname from Caddyfile text.
+    
+    Returns:
+        (modified_text, count_of_blocks_removed)
+    """
+    import re
+    # Escape hostname for regex
+    escaped_hostname = re.escape(hostname)
+    
+    # Match hostname block: "hostname {" and find its closing brace
+    # This is a simple implementation - more complex configs might need more sophisticated parsing
+    pattern = rf'\n?^{escaped_hostname}\s*\{{\s*\n(?:.*?\n)*?\s*\}}\n?'
+    
+    matches = list(re.finditer(pattern, caddyfile_text, re.MULTILINE | re.DOTALL))
+    removed_count = len(matches)
+    
+    # Remove matching blocks (process in reverse order to maintain positions)
+    modified_text = caddyfile_text
+    for match in reversed(matches):
+        modified_text = modified_text[:match.start()] + modified_text[match.end():]
+    
+    return modified_text, removed_count
+
+
+def _update_caddyfile_reverse_proxy_target(caddyfile_text: str, hostname: str, new_target: str) -> tuple[str, int]:
+    """Update reverse_proxy target for a hostname in Caddyfile text.
+    
+    Returns:
+        (modified_text, count_of_targets_updated)
+    """
+    import re
+    escaped_hostname = re.escape(hostname)
+    
+    # Match the reverse_proxy line within a hostname block
+    # Pattern: "reverse_proxy old_target" -> "reverse_proxy new_target"
+    pattern = rf'(^{escaped_hostname}\s*\{{\s*\n\s*)reverse_proxy\s+[^\n]+(\n)'
+    
+    def replacer(match):
+        return match.group(1) + f'reverse_proxy {new_target}' + match.group(2)
+    
+    modified_text, count = re.subn(pattern, replacer, caddyfile_text, flags=re.MULTILINE)
+    return modified_text, count
+
+
 def send_dns_reverse_proxy_payloads(reverse_proxy_payload: Any, dns_payload: Any) -> Dict[str, Any]:
-    """Send generated/edited payloads to configured reverse proxy and DNS APIs."""
+    """Send generated/edited payloads to configured reverse proxy (via agent) and DNS APIs."""
     cfg = config_utils.get_module_config("dns_reverse_proxy") or {}
     rp_provider = str(cfg.get("reverse_proxy_provider") or "").strip().lower()
     dns_provider = str(cfg.get("dns_provider") or "").strip().lower()
@@ -415,49 +554,41 @@ def send_dns_reverse_proxy_payloads(reverse_proxy_payload: Any, dns_payload: Any
     if dns_provider != "opnsense":
         return {"ok": False, "error": f"Unsupported DNS provider: {dns_provider}"}
 
-    caddy_base = str(cfg.get("caddy_api_url") or "").strip().rstrip("/")
+    # Fetch current Caddyfile (as text)
+    fetch_result = caddy_agent_client.fetch_config(cfg)
+    if not fetch_result.get("ok"):
+        return {"ok": False, "error": f"Failed reading Caddy config from agent: {fetch_result.get('error')}"}
+
+    caddyfile_text = fetch_result.get("config") or ""
+    if not isinstance(caddyfile_text, str):
+        return {"ok": False, "error": "Expected Caddyfile text from agent"}
+    
+    # Extract hostname and target from reverse_proxy_payload
+    # reverse_proxy_payload should have hostname matcher and target dial
+    hostname = reverse_proxy_payload.get("hostname", "").strip() if isinstance(reverse_proxy_payload, dict) else ""
+    target = reverse_proxy_payload.get("target", "").strip() if isinstance(reverse_proxy_payload, dict) else ""
+    
+    if not hostname or not target:
+        return {"ok": False, "error": "reverse_proxy_payload must have hostname and target"}
+    
+    # Append new block to Caddyfile
+    updated_caddyfile = _append_caddyfile_reverse_proxy_block(caddyfile_text, hostname, target)
+    
+    print(f"DEBUG [dns_reverse_proxy] Appending {hostname} -> {target}")
+    print(f"DEBUG [dns_reverse_proxy] Current Caddyfile length: {len(caddyfile_text)}")
+    print(f"DEBUG [dns_reverse_proxy] Updated Caddyfile length: {len(updated_caddyfile)}")
+
+    # Send to agent
+    rp_result = caddy_agent_client.save_config(cfg, updated_caddyfile)
+    if not rp_result.get("ok"):
+        return {"ok": False, "error": f"Caddy agent save failed: {rp_result.get('error')}"}
+
+    # Handle DNS payload
     opnsense_base = str(cfg.get("opnsense_api_url") or "").strip().rstrip("/")
-    if not caddy_base:
-        return {"ok": False, "error": "caddy_api_url is required"}
     if not opnsense_base:
         return {"ok": False, "error": "opnsense_api_url is required"}
 
-    caddy_verify_ssl = bool(cfg.get("caddy_verify_ssl", True))
     opnsense_verify_ssl = bool(cfg.get("opnsense_verify_ssl", True))
-
-    # Build Caddy API headers
-    caddy_headers: Dict[str, str] = {"Accept": "application/json"}
-    caddy_token = str(cfg.get("caddy_api_token") or "").strip()
-    if caddy_token:
-        caddy_headers["Authorization"] = f"Bearer {caddy_token}"
-
-    # Resolve server id dynamically, then append new route.
-    cfg_result = http_request(
-        "GET",
-        f"{caddy_base}/config/",
-        headers=caddy_headers,
-        parse_json=True,
-        verify_ssl=caddy_verify_ssl,
-    )
-    if not cfg_result.get("ok"):
-        return {"ok": False, "error": f"Failed reading Caddy config: {cfg_result.get('error') or cfg_result.get('body')}"}
-
-    caddy_json = cfg_result.get("json") if isinstance(cfg_result.get("json"), dict) else {}
-    servers = ((((caddy_json.get("apps") or {}).get("http") or {}).get("servers") or {}))
-    if not isinstance(servers, dict) or not servers:
-        return {"ok": False, "error": "Could not resolve Caddy server id from config"}
-    server_id = next(iter(servers.keys()))
-
-    rp_result = http_request(
-        "POST",
-        f"{caddy_base}/config/apps/http/servers/{server_id}/routes",
-        headers={**caddy_headers, "Content-Type": "application/json"},
-        data=reverse_proxy_payload,
-        parse_json=True,
-        verify_ssl=caddy_verify_ssl,
-    )
-    if not rp_result.get("ok"):
-        return {"ok": False, "error": f"Caddy create failed: {rp_result.get('error') or rp_result.get('body')}"}
 
     dns_result = http_request(
         "POST",
@@ -787,7 +918,7 @@ def _parse_caddyfile_like_blocks(config_text: str) -> List[Dict[str, str]]:
 
 def _get_reverse_proxy_provider_config_caddy(cfg: Dict[str, Any]) -> Dict[str, Any]:
     """Fetch and parse Caddy configuration for editing."""
-    fetch_result = proxy_service_client.fetch_config(cfg)
+    fetch_result = caddy_agent_client.fetch_config(cfg)
     if not fetch_result.get("ok"):
         return {"ok": False, "error": fetch_result.get("error")}
     return {"ok": True, "config": fetch_result.get("config") or {}}
@@ -896,29 +1027,19 @@ def delete_mapping_parts(hostname: str) -> Dict[str, Any]:
     out: Dict[str, Any] = {"ok": True, "hostname": normalized, "reverse_proxy": {}, "dns": {}}
 
     if rp_provider == "caddy":
-        fetch_result = proxy_service_client.fetch_config(cfg)
+        fetch_result = caddy_agent_client.fetch_config(cfg)
         if not fetch_result.get("ok"):
             return {"ok": False, "error": f"Failed reading reverse proxy config: {fetch_result.get('error')}"}
-        config_obj = fetch_result.get("config") or {}
-        servers = ((((config_obj.get("apps") or {}).get("http") or {}).get("servers") or {}))
-        removed_count = 0
-        if isinstance(servers, dict):
-            for server_data in servers.values():
-                if not isinstance(server_data, dict):
-                    continue
-                routes = server_data.get("routes")
-                if not isinstance(routes, list):
-                    continue
-                kept: List[Any] = []
-                for route in routes:
-                    if _route_has_host(route, normalized):
-                        removed_count += 1
-                    else:
-                        kept.append(route)
-                server_data["routes"] = kept
-
+        caddyfile_text = fetch_result.get("config") or ""
+        
+        if not isinstance(caddyfile_text, str):
+            return {"ok": False, "error": "Expected Caddyfile text from agent"}
+        
+        # Remove matching block from Caddyfile
+        modified_caddyfile, removed_count = _remove_caddyfile_reverse_proxy_block(caddyfile_text, normalized)
+        
         if removed_count > 0:
-            save_result = proxy_service_client.save_config(cfg, config_obj)
+            save_result = caddy_agent_client.save_config(cfg, modified_caddyfile)
             if not save_result.get("ok"):
                 return {"ok": False, "error": f"Failed saving reverse proxy config: {save_result.get('error')}"}
             out["reverse_proxy"] = {"ok": True, "removed": removed_count}
@@ -953,42 +1074,23 @@ def edit_reverse_proxy_mapping(hostname: str, target_protocol: str, target_host:
     if rp_provider != "caddy":
         return {"ok": False, "error": f"Unsupported reverse proxy provider: {rp_provider}"}
 
-    fetch_result = proxy_service_client.fetch_config(cfg)
+    fetch_result = caddy_agent_client.fetch_config(cfg)
     if not fetch_result.get("ok"):
         return {"ok": False, "error": fetch_result.get("error")}
-    config_obj = fetch_result.get("config") or {}
-    servers = ((((config_obj.get("apps") or {}).get("http") or {}).get("servers") or {}))
+    
+    caddyfile_text = fetch_result.get("config") or ""
+    if not isinstance(caddyfile_text, str):
+        return {"ok": False, "error": "Expected Caddyfile text from agent"}
+    
     dial = f"{target_host}:{int(target_port)}"
-    updated = 0
-    options = _get_mapping_options(cfg)
-
-    if isinstance(servers, dict):
-        for server_data in servers.values():
-            if not isinstance(server_data, dict):
-                continue
-            routes = server_data.get("routes")
-            if not isinstance(routes, list):
-                continue
-            for route in routes:
-                if not _route_has_host(route, normalized):
-                    continue
-                handle = _find_reverse_proxy_handle(route)
-                if not handle:
-                    continue
-                handle["upstreams"] = [{"dial": dial}]
-                if str(target_protocol or "http").lower() == "https" and options["reverse_proxy"]["skip_tls_verify"]:
-                    handle["transport"] = {
-                        "protocol": "http",
-                        "tls": {"insecure_skip_verify": True},
-                    }
-                else:
-                    handle.pop("transport", None)
-                updated += 1
-
+    
+    # Update the target in Caddyfile
+    modified_caddyfile, updated = _update_caddyfile_reverse_proxy_target(caddyfile_text, normalized, dial)
+    
     if updated == 0:
         return {"ok": False, "error": "Reverse proxy route not found for hostname"}
 
-    save_result = proxy_service_client.save_config(cfg, config_obj)
+    save_result = caddy_agent_client.save_config(cfg, modified_caddyfile)
     if not save_result.get("ok"):
         return {"ok": False, "error": save_result.get("error")}
     return {"ok": True, "updated": updated, "dial": dial}
@@ -1062,7 +1164,7 @@ def get_reverse_proxy_provider_config() -> Dict[str, Any]:
     cfg = config_utils.get_module_config("dns_reverse_proxy") or {}
     rp_provider = str(cfg.get("reverse_proxy_provider") or "").strip().lower()
     if rp_provider == "caddy":
-        fetch_result = proxy_service_client.fetch_config(cfg)
+        fetch_result = caddy_agent_client.fetch_config(cfg)
         if not fetch_result.get("ok"):
             return {"ok": False, "error": fetch_result.get("error")}
         payload = fetch_result.get("config") or {}
@@ -1075,25 +1177,18 @@ def get_reverse_proxy_provider_config() -> Dict[str, Any]:
 
 
 def save_reverse_proxy_provider_config(config_text: str) -> Dict[str, Any]:
-    """Save provider-specific reverse proxy configuration payload text."""
+    """Save provider-specific reverse proxy configuration (Caddyfile text)."""
     cfg = config_utils.get_module_config("dns_reverse_proxy") or {}
     rp_provider = str(cfg.get("reverse_proxy_provider") or "").strip().lower()
     if rp_provider != "caddy":
         return {"ok": False, "error": f"Unsupported reverse proxy provider: {rp_provider}"}
-    fetch_result = proxy_service_client.fetch_config(cfg)
-    if not fetch_result.get("ok"):
-        return {"ok": False, "error": fetch_result.get("error")}
+    
+    if not config_text or not isinstance(config_text, str):
+        return {"ok": False, "error": "config_text (Caddyfile content) is required"}
+    
+    # Save the raw Caddyfile text to agent (it will validate on staging)
+    return caddy_agent_client.save_config(cfg, config_text)
 
-    payload = fetch_result.get("config") or {}
-    updates = _parse_caddyfile_like_blocks(config_text)
-    if not updates:
-        return {"ok": False, "error": "No reverse_proxy blocks found in Caddyfile text"}
-
-    changed = _update_caddy_reverse_proxy_targets(payload, updates)
-    if changed == 0:
-        return {"ok": False, "error": "No matching Caddy reverse proxy routes were updated"}
-
-    return proxy_service_client.save_config(cfg, payload)
 
 
 def get_dns_provider_config_link() -> Dict[str, Any]:
@@ -1175,53 +1270,26 @@ def test_proxmox_api(cfg: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def test_caddy_api(cfg: Dict[str, Any]) -> Dict[str, Any]:
-    """Test Caddy API reachability and token validity."""
-    base_url = str(cfg.get("caddy_api_url") or "").strip().rstrip("/")
-    token = str(cfg.get("caddy_api_token") or "").strip()
-    verify_ssl = bool(cfg.get("caddy_verify_ssl", True))
-    if not base_url:
-        out = {"ok": False, "message": "Missing Caddy API URL", "error": "caddy_api_url is required"}
-        print(f"FAIL [api_helper] test_caddy_api missing caddy_api_url")
-        return out
-
-    headers: Dict[str, str] = {"Accept": "application/json"}
-    if token:
-        headers["Authorization"] = f"Bearer {token}"
-
-    result = http_request(
-        "GET",
-        f"{base_url}/config/",
-        headers=headers,
-        parse_json=True,
-        verify_ssl=verify_ssl,
-    )
-
-    if result.get("ok"):
-        out = {
-            "ok": True,
-            "message": "Caddy API reachable",
-            "status": result.get("status"),
-        }
-        print(f"OK [api_helper] test_caddy_api reachable")
-        return out
-
-    status = int(result.get("status") or 0)
-    if status in (401, 403):
-        out = {
+    """Test Caddy Agent reachability and status."""
+    status_result = caddy_agent_client.get_status(cfg)
+    
+    if not status_result.get("ok"):
+        error = status_result.get("error") or "Failed to connect to Caddy Agent"
+        print(f"FAIL [api_helper] test_caddy_agent: {error}")
+        return {
             "ok": False,
-            "message": "Caddy API reachable but token is invalid",
-            "status": status,
-            "error": result.get("error") or result.get("body"),
+            "message": "Failed to connect to Caddy Agent",
+            "error": error
         }
-        print(f"FAIL [api_helper] test_caddy_api invalid token: {out['error']}")
-        return out
-    out = {
-        "ok": False,
-        "message": "Failed to connect to Caddy API",
-        "status": status,
-        "error": result.get("error") or result.get("body"),
+    
+    agent_status = status_result.get("status", "unknown")
+    print(f"OK [api_helper] test_caddy_agent reachable, status: {agent_status}")
+    return {
+        "ok": True,
+        "message": "Caddy Agent reachable",
+        "status": agent_status,
+        "details": status_result.get("details", {})
     }
-    print(f"FAIL [api_helper] test_caddy_api failed to connect: {out['error']}")
     return out
 
 

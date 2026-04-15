@@ -41,24 +41,46 @@ def preview_builder_payloads():
 
 @dns_reverse_proxy_bp.route("/api/dns-reverse-proxy/builder/send", methods=["POST"])
 def send_builder_payloads():
-    """Send edited API payloads to reverse proxy and DNS providers."""
+    """Send builder-generated mappings to reverse proxy and DNS providers."""
     data = request.get_json(silent=True) or {}
     if not isinstance(data, dict):
         return jsonify({"ok": False, "error": "Invalid JSON body"}), 400
 
-    rp_text = str(data.get("reverse_proxy_payload_text") or "").strip()
-    dns_text = str(data.get("dns_payload_text") or "").strip()
-    if not rp_text or not dns_text:
-        return jsonify({"ok": False, "error": "Both reverse_proxy_payload_text and dns_payload_text are required"}), 400
+    # Extract hostname and target from the builder form data
+    hostname = str(data.get("hostname") or "").strip()
+    domain = str(data.get("domain") or "").strip().strip(".")
+    target_protocol = str(data.get("target_protocol") or "http").strip().lower()
+    target_host = str(data.get("target_host") or "").strip()
+    target_port = int(data.get("target_port") or (443 if target_protocol == "https" else 80))
+    dns_record_type = str(data.get("dns_record_type") or "A").strip().upper()
+    dns_record_value = str(data.get("dns_record_value") or "").strip()
+    
+    if not hostname or not target_host or target_port <= 0:
+        return jsonify({"ok": False, "error": "hostname, target_host, and target_port are required"}), 400
+    if not dns_record_type or not dns_record_value:
+        return jsonify({"ok": False, "error": "DNS fields (record_type, record_value) are required"}), 400
 
-    try:
-        rp_payload = json.loads(rp_text)
-    except Exception as exc:
-        return jsonify({"ok": False, "error": f"Invalid reverse proxy payload JSON: {exc}"}), 400
-    try:
-        dns_payload = json.loads(dns_text)
-    except Exception as exc:
-        return jsonify({"ok": False, "error": f"Invalid DNS payload JSON: {exc}"}), 400
+    # Build the full hostname (including domain if provided)
+    cfg = api_helper.config_utils.get_module_config("dns_reverse_proxy") or {}
+    options = api_helper._get_mapping_options(cfg)
+    
+    caddy_host = api_helper._join_host_domain(hostname, domain)
+    if options["reverse_proxy"]["normalize_hostnames"]:
+        caddy_host = caddy_host.rstrip(".").lower()
+    
+    # Build the reverse proxy payload for Caddyfile text format
+    dial = f"{target_host}:{target_port}"
+    rp_payload = {
+        "hostname": caddy_host,
+        "target": dial,
+    }
+    
+    # Build the DNS payload
+    dns_payload = {
+        "hostname": hostname,
+        "rr": dns_record_type,
+        "server": dns_record_value if dns_record_type in ("A", "AAAA") else "",
+    }
 
     result = api_helper.send_dns_reverse_proxy_payloads(rp_payload, dns_payload)
     if not result.get("ok"):

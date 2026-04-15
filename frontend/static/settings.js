@@ -287,9 +287,10 @@ async function loadModulesUI() {
           default: 'opnsense'
         },
         default_domain: { label: 'Default Domain (for builder)', type: 'text', placeholder: 'example.com' },
-        caddy_api_url: { label: 'Caddy API URL', type: 'text', placeholder: 'https://caddy.example.com:2019' },
-        caddy_api_token: { label: 'Caddy API Token', type: 'password', placeholder: '********' },
-        caddy_verify_ssl: { label: 'Verify Caddy SSL', type: 'checkbox', default: true },
+        caddy_agent_host: { label: 'Caddy Agent Host', type: 'text', placeholder: '192.168.1.50' },
+        caddy_agent_port: { label: 'Caddy Agent Port', type: 'number', placeholder: '9999', default: 9999 },
+        caddy_agent_scheme: { label: 'Caddy Agent Scheme', type: 'select', options: [{ value: 'http', label: 'HTTP' }, { value: 'https', label: 'HTTPS' }], default: 'http' },
+        caddy_agent_verify_ssl: { label: 'Verify Caddy Agent SSL', type: 'checkbox', default: true },
         opnsense_api_url: { label: 'OPNsense API URL', type: 'text', placeholder: 'https://opnsense.example.com' },
         opnsense_api_key: { label: 'OPNsense API Key', type: 'text', placeholder: 'api-key' },
         opnsense_api_secret: { label: 'OPNsense API Secret', type: 'password', placeholder: '********' },

@@ -27,6 +27,7 @@ SyslogIdentifier=caddy-manager
 # Security hardening
 NoNewPrivileges=true
 ProtectSystem=strict
+ReadWritePaths=/var/lib/caddy-manager /etc/caddy
 ProtectHome=yes
 PrivateTmp=yes
 PrivateDevices=yes

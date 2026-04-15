@@ -135,22 +135,20 @@ class CaddyValidator:
                 "message": str,
             }
         """
-        # Write to temp file
+        # Write to temp file with .caddyfile extension
         with tempfile.NamedTemporaryFile(
             mode="w",
-            suffix=".json",
+            suffix=".caddyfile",
             dir=self.temp_dir,
             delete=False,
         ) as f:
             temp_path = f.name
-            # Caddy validate expects JSON config, not Caddyfile
-            # If content looks like Caddyfile, we'd need to convert or use -adapter flag
             f.write(config_content)
         
         try:
-            # Run caddy validate
+            # Run caddy validate with caddyfile adapter
             result = subprocess.run(
-                ["caddy", "validate", "--config", temp_path],
+                ["caddy", "validate", "--config", temp_path, "--adapter", "caddyfile"],
                 capture_output=True,
                 text=True,
                 timeout=10,
