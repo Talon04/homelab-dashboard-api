@@ -196,9 +196,9 @@ main() {
         cd - > /dev/null
     fi
     
-    # Check if agents/caddy-agent exists
+    # Check if /agents/caddy-agent exists
     if [ ! -d "$REPO_DIR/agents/caddy-agent" ]; then
-        log_error "agents/caddy-agent not found in repo at $REPO_DIR"
+        log_error "/agents/caddy-agent not found in repo at $REPO_DIR"
         exit 1
     fi
     
