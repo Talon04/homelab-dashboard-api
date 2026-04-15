@@ -21,8 +21,8 @@ REPO_DIR="${REPO_DIR:-./homelab-dashboard-api}"
 INSTALL_DIR="/opt/caddy-manager"
 DATA_DIR="/var/lib/caddy-manager"
 SERVICE_NAME="caddy-manager"
-SERVICE_USER="caddy"
-SERVICE_GROUP="caddy"
+SERVICE_USER="caddy-manager"
+SERVICE_GROUP="caddy-manager"
 
 # Colors for output
 RED='\033[0;31m'
@@ -86,6 +86,27 @@ check_user_exists() {
         log_error "User '$1' does not exist"
         exit 1
     fi
+}
+
+create_user_if_needed() {
+    local user=$1
+    local group=$2
+    
+    if id "$user" &>/dev/null; then
+        log_info "user '$user' already exists"
+        return 0
+    fi
+    
+    log_info "Creating system user '$user'..."
+    
+    # Create group first
+    if ! getent group "$group" &>/dev/null; then
+        groupadd --system "$group"
+    fi
+    
+    # Create user
+    useradd --system --gid "$group" --shell /usr/sbin/nologin --home-dir /var/lib/caddy-manager "$user"
+    log_info "✓ user '$user' created"
 }
 
 detect_os() {
@@ -181,9 +202,9 @@ main() {
         log_warn "Caddy binary not found - validation will fail at runtime"
     fi
     
-    # Check if user exists
-    log_info "Checking if '$SERVICE_USER' user exists..."
-    check_user_exists "$SERVICE_USER"
+    # Create or check if user exists
+    log_info "Setting up '$SERVICE_USER' user..."
+    create_user_if_needed "$SERVICE_USER" "$SERVICE_GROUP"
     
     # Clone/update repo if needed
     if [ ! -d "$REPO_DIR" ]; then
@@ -223,16 +244,24 @@ main() {
     chmod 750 "$DATA_DIR"
     chmod 750 "$INSTALL_DIR"
     
-    # Ensure caddy user has write access to /etc/caddy/Caddyfile
+    # Ensure caddy-manager user has write access to /etc/caddy/Caddyfile
     log_info "Setting up permissions for $SERVICE_USER to manage /etc/caddy/Caddyfile..."
     if [ -d "/etc/caddy" ]; then
-        chown "$SERVICE_USER:$SERVICE_GROUP" /etc/caddy
-        chmod 770 /etc/caddy
+        # Give caddy-manager read/write on Caddyfile
         if [ -f "/etc/caddy/Caddyfile" ]; then
             chown "$SERVICE_USER:$SERVICE_GROUP" /etc/caddy/Caddyfile
             chmod 660 /etc/caddy/Caddyfile
             log_info "✓ Caddy manager has write permissions to /etc/caddy/Caddyfile"
         fi
+        
+        # Allow caddy-manager to reload/restart Caddy service without password
+        log_info "Setting up sudo rule for caddy service reload..."
+        tee /etc/sudoers.d/caddy-manager > /dev/null <<EOF
+# Allow caddy-manager to reload/restart Caddy without password
+$SERVICE_USER ALL=(ALL) NOPASSWD: /bin/systemctl reload caddy, /bin/systemctl restart caddy
+EOF
+        chmod 440 /etc/sudoers.d/caddy-manager
+        log_info "✓ Sudoers rule created for caddy-manager"
     else
         log_warn "/etc/caddy directory not found - skipping permission setup"
     fi

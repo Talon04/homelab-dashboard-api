@@ -28,7 +28,8 @@ import logger
 
 CADDYFILE_PATH = os.environ.get("CADDYFILE_PATH", "/etc/caddy/Caddyfile")
 DATA_DIR = os.environ.get("CADDY_MANAGER_DATA", "/var/lib/caddy-manager")
-CADDY_RELOAD_CMD = os.environ.get("CADDY_RELOAD_CMD", "systemctl reload caddy")
+# Use sudo to reload Caddy since caddy-manager user has sudoers rule for this
+CADDY_RELOAD_CMD = os.environ.get("CADDY_RELOAD_CMD", "sudo systemctl reload caddy")
 
 os.makedirs(DATA_DIR, exist_ok=True)
 
