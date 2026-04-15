@@ -45,12 +45,14 @@ Options:
   --install-dir PATH   Installation directory (default: /opt/caddy-manager)
   --data-dir PATH      Data directory (default: /var/lib/caddy-manager)
   --no-start           Install but don't start the service
+  --fix-perms          Fix permissions on Caddyfile without full install
   --help               Show this help message
 
 Examples:
   sudo bash install.sh
   sudo bash install.sh --repo /home/user/projects/homelab-dashboard-api
   sudo bash install.sh --no-start
+  sudo bash install.sh --fix-perms
 
 EOF
 }
@@ -143,6 +145,34 @@ install_python_packages() {
     esac
 }
 
+fix_permissions() {
+    """Fix permissions on Caddyfile without full installation."""
+    log_info "Fixing permissions for $SERVICE_USER..."
+    check_root
+    
+    if [ ! -d "/etc/caddy" ]; then
+        log_error "/etc/caddy directory not found"
+        exit 1
+    fi
+    
+    # Create default Caddyfile if missing
+    if [ ! -f "/etc/caddy/Caddyfile" ]; then
+        log_info "Creating default empty Caddyfile..."
+        touch /etc/caddy/Caddyfile
+    fi
+    
+    # Fix ownership and permissions
+    log_info "Setting ownership to $SERVICE_USER:$SERVICE_GROUP..."
+    chown "$SERVICE_USER:$SERVICE_GROUP" /etc/caddy/Caddyfile
+    
+    log_info "Setting permissions to rw-rw---- (660)..."
+    chmod 660 /etc/caddy/Caddyfile
+    
+    # Verify
+    log_info "✓ Permissions fixed!"
+    ls -la /etc/caddy/Caddyfile
+}
+
 # =============================================================================
 # MAIN
 # =============================================================================
@@ -159,6 +189,10 @@ main() {
             --help)
                 print_help
                 exit 0
+                ;;
+            --fix-perms)
+                fix_permissions
+                exit $?
                 ;;
             --repo)
                 REPO_DIR="$2"
@@ -248,14 +282,28 @@ main() {
     find "$DATA_DIR" -type d -exec chmod 750 {} \;
     find "$DATA_DIR" -type f -exec chmod 640 {} \;
     
-    # Ensure caddy-manager user has write access to /etc/caddy/Caddyfile
+    # Ensure caddy-manager user has read/write access to /etc/caddy/Caddyfile
     log_info "Setting up permissions for $SERVICE_USER to manage /etc/caddy/Caddyfile..."
     if [ -d "/etc/caddy" ]; then
-        # Give caddy-manager read/write on Caddyfile
-        if [ -f "/etc/caddy/Caddyfile" ]; then
-            chown "$SERVICE_USER:$SERVICE_GROUP" /etc/caddy/Caddyfile
-            chmod 660 /etc/caddy/Caddyfile
-            log_info "✓ Caddy manager has write permissions to /etc/caddy/Caddyfile"
+        # Create a default Caddyfile if it doesn't exist
+        if [ ! -f "/etc/caddy/Caddyfile" ]; then
+            log_info "Creating default Caddyfile (empty)..."
+            touch /etc/caddy/Caddyfile
+        fi
+        
+        # Ensure caddy-manager can read and write the Caddyfile
+        # Change ownership to caddy-manager user
+        chown "$SERVICE_USER:$SERVICE_GROUP" /etc/caddy/Caddyfile
+        # Set permissions: rw-rw---- (660) allows caddy-manager and group to read/write
+        chmod 660 /etc/caddy/Caddyfile
+        log_info "✓ Caddyfile permissions set for $SERVICE_USER (rw-rw----)"
+        
+        # Also ensure caddy-manager can read the /etc/caddy directory itself
+        # This is needed to list and access files in the directory
+        log_info "Setting directory permissions..."
+        if ! getent group caddy &>/dev/null; then
+            # If caddy group doesn't exist, just set user permissions
+            chmod u+rx /etc/caddy
         fi
         
         # Allow caddy-manager to reload/restart Caddy service without password
