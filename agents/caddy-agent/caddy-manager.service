@@ -6,13 +6,13 @@ Wants=caddy.service
 
 [Service]
 Type=simple
-User=caddy
-Group=caddy
+User=caddy-manager
+Group=caddy-manager
 WorkingDirectory=/opt/caddy-manager
 
 Environment="CADDYFILE_PATH=/etc/caddy/Caddyfile"
 Environment="CADDY_MANAGER_DATA=/var/lib/caddy-manager"
-Environment="CADDY_RELOAD_CMD=systemctl reload caddy"
+Environment="CADDY_RELOAD_CMD=sudo systemctl reload caddy"
 Environment="PORT=9999"
 Environment="DEBUG=false"
 

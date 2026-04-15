@@ -237,12 +237,16 @@ main() {
     mkdir -p "$DATA_DIR/backups"
     mkdir -p "$DATA_DIR/temp"
 
-    # Set permissions
+    # Set permissions - ensure caddy-manager user can read all files
     log_info "Setting permissions..."
     chown -R "$SERVICE_USER:$SERVICE_GROUP" "$INSTALL_DIR"
     chown -R "$SERVICE_USER:$SERVICE_GROUP" "$DATA_DIR"
-    chmod 750 "$DATA_DIR"
-    chmod 750 "$INSTALL_DIR"
+    # 755 on directories (rwxr-xr-x) so user can execute/read, 644 on files (rw-r--r--)
+    find "$INSTALL_DIR" -type d -exec chmod 755 {} \;
+    find "$INSTALL_DIR" -type f -exec chmod 644 {} \;
+    # 750 on data directory (rwxr-x---) for security
+    find "$DATA_DIR" -type d -exec chmod 750 {} \;
+    find "$DATA_DIR" -type f -exec chmod 640 {} \;
     
     # Ensure caddy-manager user has write access to /etc/caddy/Caddyfile
     log_info "Setting up permissions for $SERVICE_USER to manage /etc/caddy/Caddyfile..."
