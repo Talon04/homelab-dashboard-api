@@ -80,12 +80,21 @@ def get_current_config():
             "config": content,
             "path": CADDYFILE_PATH,
         }), 200
-    except FileNotFoundError:
+    except FileNotFoundError as exc:
+        logger.error("caddy_agent", f"Caddyfile not found: {CADDYFILE_PATH}")
         return jsonify({
             "ok": False,
             "error": f"Caddyfile not found at {CADDYFILE_PATH}",
         }), 404
+    except PermissionError as exc:
+        logger.error("caddy_agent", f"Permission denied reading Caddyfile: {CADDYFILE_PATH}")
+        return jsonify({
+            "ok": False,
+            "error": f"Permission denied reading Caddyfile at {CADDYFILE_PATH}",
+        }), 403
     except Exception as exc:
+        logger.error("caddy_agent", f"Failed to read Caddyfile: {exc}")
+        logger.error("caddy_agent", f"Traceback: {traceback.format_exc()}")
         return jsonify({
             "ok": False,
             "error": f"Failed to read Caddyfile: {exc}",
@@ -178,7 +187,9 @@ def stage_config():
         
         return jsonify(result), 200
     except Exception as exc:
+        error_trace = traceback.format_exc()
         logger.error("caddy_agent", f"Failed to stage config: {exc}")
+        logger.error("caddy_agent", f"Traceback:\n{error_trace}")
         return jsonify({
             "ok": False,
             "error": f"Failed to stage config: {exc}",
@@ -288,6 +299,9 @@ def rollback_config():
             "restored_from": backup_path,
         }), 200
     except Exception as exc:
+        error_trace = traceback.format_exc()
+        logger.error("caddy_agent", f"Failed to rollback: {exc}")
+        logger.error("caddy_agent", f"Traceback:\n{error_trace}")
         return jsonify({
             "ok": False,
             "error": f"Failed to rollback: {exc}",
@@ -321,11 +335,15 @@ def _generate_preview(config_content: str) -> str:
 
 @app.errorhandler(404)
 def not_found(e):
+    logger.error("caddy_agent", f"404 Not Found: {request.path}")
     return jsonify({"ok": False, "error": "Not found"}), 404
 
 
 @app.errorhandler(500)
 def server_error(e):
+    error_trace = traceback.format_exc()
+    logger.error("caddy_agent", f"500 Server Error: {str(e)}")
+    logger.error("caddy_agent", f"Traceback:\n{error_trace}")
     return jsonify({"ok": False, "error": "Internal server error"}), 500
 
 

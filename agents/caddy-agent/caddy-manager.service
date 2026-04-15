@@ -15,23 +15,15 @@ Environment="CADDY_MANAGER_DATA=/var/lib/caddy-manager"
 Environment="CADDY_RELOAD_CMD=sudo systemctl reload caddy"
 Environment="PORT=9999"
 Environment="DEBUG=false"
+Environment="PYTHONUNBUFFERED=1"
 
-ExecStart=/usr/bin/python3 app.py
+ExecStart=/usr/bin/python3 -u app.py
 
 Restart=always
 RestartSec=5
 StandardOutput=journal
 StandardError=journal
 SyslogIdentifier=caddy-manager
-
-# Allow sudo exec for caddy reload
-ExecPreStart=
-RestrictNamespaces=no
-ProtectHome=yes
-PrivateTmp=yes
-PrivateDevices=yes
-SecureBits=keep-caps
-CapabilityBoundingSet=
 
 [Install]
 WantedBy=multi-user.target
