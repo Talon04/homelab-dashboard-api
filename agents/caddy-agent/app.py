@@ -15,9 +15,11 @@ The Caddyfile is the source of truth. All operations are file-based.
 
 import json
 import os
+import traceback
 from flask import Flask, jsonify, request
 
 from managers import CaddyfileManager, CaddyValidator, StateManager
+import logger
 
 
 # =============================================================================
@@ -102,15 +104,19 @@ def validate_config():
     config_content = data.get("config")
     
     if not config_content:
+        logger.error("caddy_agent", "config required in request body")
         return jsonify({
             "ok": False,
             "error": "config is required in request body",
         }), 400
     
     try:
+        logger.debug("caddy_agent", f"Validating config (length: {len(config_content)})")
         result = validator.validate(config_content)
+        logger.debug("caddy_agent", f"Validation: valid={result.get('valid')}, errors={len(result.get('errors', []))}")
         return jsonify(result), (200 if result.get("valid") else 400)
     except Exception as exc:
+        logger.error("caddy_agent", f"Validation failed: {exc}")
         return jsonify({
             "ok": False,
             "valid": False,
@@ -141,17 +147,21 @@ def stage_config():
     config_content = data.get("config")
     
     if not config_content:
+        logger.error("caddy_agent", "config required in request body")
         return jsonify({
             "ok": False,
             "error": "config is required in request body",
         }), 400
     
     try:
+        logger.debug("caddy_agent", f"Staging config (length: {len(config_content)})")
         # Stage the config
         staged_path = caddyfile_mgr.write_staged(config_content)
+        logger.debug("caddy_agent", f"Config staged to: {staged_path}")
         
         # Validate
         validation = validator.validate(config_content)
+        logger.debug("caddy_agent", f"Validation: valid={validation.get('valid')}, errors={len(validation.get('errors', []))}")
         
         # Generate preview
         preview = _generate_preview(config_content)
@@ -167,6 +177,7 @@ def stage_config():
         
         return jsonify(result), 200
     except Exception as exc:
+        logger.error("caddy_agent", f"Failed to stage config: {exc}")
         return jsonify({
             "ok": False,
             "error": f"Failed to stage config: {exc}",
@@ -188,31 +199,47 @@ def apply_config():
     try:
         # Check if staged config exists
         if not caddyfile_mgr.staged_exists():
+            logger.error("caddy_agent", "No staged config exists")
             return jsonify({
                 "ok": False,
                 "error": "No staged config to apply",
             }), 400
         
+        logger.debug("caddy_agent", "Staged config exists, reading...")
         # Validate staged
         staged_content = caddyfile_mgr.read_staged()
+        logger.debug("caddy_agent", f"Staged content length: {len(staged_content)}")
+        
         validation = validator.validate(staged_content)
+        logger.debug("caddy_agent", f"Validation result: valid={validation.get('valid')}, errors={len(validation.get('errors', []))}")
+        
         if not validation.get("valid"):
+            error_list = validation.get("errors", [])
+            error_msg = f"Staged config invalid: {', '.join(error_list) if error_list else 'Unknown error'}"
+            logger.error("caddy_agent", error_msg)
             return jsonify({
                 "ok": False,
-                "error": f"Staged config invalid: {validation.get('errors')}",
+                "error": error_msg,
             }), 400
         
+        logger.debug("caddy_agent", "Validation passed, backing up current config...")
         # Backup current
         backup_path = caddyfile_mgr.backup_current()
+        logger.debug("caddy_agent", f"Backed up to: {backup_path}")
         
+        logger.debug("caddy_agent", "Applying staged config...")
         # Swap
         caddyfile_mgr.apply_staged()
+        logger.debug("caddy_agent", "Staged config applied successfully")
         
         # Reload Caddy
+        logger.debug("caddy_agent", "Reloading Caddy...")
         os.system(CADDY_RELOAD_CMD)
+        logger.debug("caddy_agent", "Caddy reload command executed")
         
         # Update state
         state_mgr.record_apply()
+        logger.info("caddy_agent", "Config applied successfully")
         
         return jsonify({
             "ok": True,
@@ -220,6 +247,9 @@ def apply_config():
             "backup_path": backup_path,
         }), 200
     except Exception as exc:
+        error_trace = traceback.format_exc()
+        logger.error("caddy_agent", f"Exception: {exc}")
+        logger.error("caddy_agent", f"Traceback:\n{error_trace}")
         return jsonify({
             "ok": False,
             "error": f"Failed to apply config: {exc}",

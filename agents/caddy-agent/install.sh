@@ -196,9 +196,9 @@ main() {
         cd - > /dev/null
     fi
     
-    # Check if services/caddy-manager exists
-    if [ ! -d "$REPO_DIR/services/caddy-manager" ]; then
-        log_error "services/caddy-manager not found in repo at $REPO_DIR"
+    # Check if agents/caddy-agent exists
+    if [ ! -d "$REPO_DIR/agents/caddy-agent" ]; then
+        log_error "agents/caddy-agent not found in repo at $REPO_DIR"
         exit 1
     fi
     
@@ -208,14 +208,14 @@ main() {
     
     # Copy files
     log_info "Copying files to $INSTALL_DIR..."
-    cp -r "$REPO_DIR/services/caddy-manager/"* "$INSTALL_DIR/"
+    cp -r "$REPO_DIR/agents/caddy-agent/"* "$INSTALL_DIR/"
     
     # Create data directory
     log_info "Creating data directory: $DATA_DIR"
     mkdir -p "$DATA_DIR"
     mkdir -p "$DATA_DIR/backups"
     mkdir -p "$DATA_DIR/temp"
-    
+
     # Set permissions
     log_info "Setting permissions..."
     chown -R "$SERVICE_USER:$SERVICE_GROUP" "$INSTALL_DIR"
