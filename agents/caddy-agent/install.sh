@@ -223,6 +223,20 @@ main() {
     chmod 750 "$DATA_DIR"
     chmod 750 "$INSTALL_DIR"
     
+    # Ensure caddy user has write access to /etc/caddy/Caddyfile
+    log_info "Setting up permissions for $SERVICE_USER to manage /etc/caddy/Caddyfile..."
+    if [ -d "/etc/caddy" ]; then
+        chown "$SERVICE_USER:$SERVICE_GROUP" /etc/caddy
+        chmod 770 /etc/caddy
+        if [ -f "/etc/caddy/Caddyfile" ]; then
+            chown "$SERVICE_USER:$SERVICE_GROUP" /etc/caddy/Caddyfile
+            chmod 660 /etc/caddy/Caddyfile
+            log_info "✓ Caddy manager has write permissions to /etc/caddy/Caddyfile"
+        fi
+    else
+        log_warn "/etc/caddy directory not found - skipping permission setup"
+    fi
+    
     # Install systemd service
     log_info "Installing systemd service..."
     cp "$INSTALL_DIR/caddy-manager.service" "/etc/systemd/system/$SERVICE_NAME.service"
