@@ -8,6 +8,7 @@ Wants=caddy.service
 Type=simple
 User=caddy-manager
 Group=caddy-manager
+SupplementaryGroups=caddy
 WorkingDirectory=/opt/caddy-manager
 
 Environment="CADDYFILE_PATH=/etc/caddy/Caddyfile"
