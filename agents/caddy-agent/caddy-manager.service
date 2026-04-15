@@ -24,10 +24,9 @@ StandardOutput=journal
 StandardError=journal
 SyslogIdentifier=caddy-manager
 
-# Security hardening
-NoNewPrivileges=true
-ProtectSystem=strict
-ReadWritePaths=/var/lib/caddy-manager /etc/caddy
+# Allow sudo exec for caddy reload
+ExecPreStart=
+RestrictNamespaces=no
 ProtectHome=yes
 PrivateTmp=yes
 PrivateDevices=yes
