@@ -161,6 +161,17 @@ fix_permissions() {
         touch /etc/caddy/Caddyfile
     fi
     
+    # Add caddy-manager to the caddy group so it can access /etc/caddy directory
+    if getent group caddy &>/dev/null; then
+        log_info "Adding $SERVICE_USER to caddy group..."
+        if ! groups "$SERVICE_USER" | grep -q caddy; then
+            usermod -a -G caddy "$SERVICE_USER"
+            log_info "✓ $SERVICE_USER added to caddy group"
+        else
+            log_info "$SERVICE_USER is already in caddy group"
+        fi
+    fi
+    
     # Fix ownership and permissions on Caddyfile
     log_info "Setting ownership to $SERVICE_USER:$SERVICE_GROUP..."
     chown "$SERVICE_USER:$SERVICE_GROUP" /etc/caddy/Caddyfile
@@ -168,9 +179,9 @@ fix_permissions() {
     log_info "Setting permissions to rw-rw---- (660)..."
     chmod 660 /etc/caddy/Caddyfile
     
-    # Also fix directory permissions so caddy-manager can list/access files
-    log_info "Ensuring directory is readable by $SERVICE_USER..."
-    chmod u+rx,g+rx /etc/caddy
+    # Ensure directory is readable by caddy group (since caddy-manager is now in it)
+    log_info "Ensuring directory is readable by caddy group..."
+    chmod g+rx /etc/caddy
     
     # Verify
     log_info "✓ Permissions fixed!"
@@ -178,6 +189,8 @@ fix_permissions() {
     ls -la /etc/caddy/Caddyfile
     log_info "Directory details:"
     ls -ld /etc/caddy
+    log_info "$SERVICE_USER group memberships:"
+    id "$SERVICE_USER"
 }
 
 # =============================================================================
