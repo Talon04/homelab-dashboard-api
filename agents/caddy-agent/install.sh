@@ -146,7 +146,7 @@ install_python_packages() {
 }
 
 fix_permissions() {
-    """Fix permissions on Caddyfile without full installation."""
+    # Fix permissions on Caddyfile without full installation
     log_info "Fixing permissions for $SERVICE_USER..."
     check_root
     
@@ -161,16 +161,23 @@ fix_permissions() {
         touch /etc/caddy/Caddyfile
     fi
     
-    # Fix ownership and permissions
+    # Fix ownership and permissions on Caddyfile
     log_info "Setting ownership to $SERVICE_USER:$SERVICE_GROUP..."
     chown "$SERVICE_USER:$SERVICE_GROUP" /etc/caddy/Caddyfile
     
     log_info "Setting permissions to rw-rw---- (660)..."
     chmod 660 /etc/caddy/Caddyfile
     
+    # Also fix directory permissions so caddy-manager can list/access files
+    log_info "Ensuring directory is readable by $SERVICE_USER..."
+    chmod u+rx,g+rx /etc/caddy
+    
     # Verify
     log_info "✓ Permissions fixed!"
+    log_info "Caddyfile details:"
     ls -la /etc/caddy/Caddyfile
+    log_info "Directory details:"
+    ls -ld /etc/caddy
 }
 
 # =============================================================================
@@ -283,40 +290,20 @@ main() {
     find "$DATA_DIR" -type f -exec chmod 640 {} \;
     
     # Ensure caddy-manager user has read/write access to /etc/caddy/Caddyfile
-    log_info "Setting up permissions for $SERVICE_USER to manage /etc/caddy/Caddyfile..."
-    if [ -d "/etc/caddy" ]; then
-        # Create a default Caddyfile if it doesn't exist
-        if [ ! -f "/etc/caddy/Caddyfile" ]; then
-            log_info "Creating default Caddyfile (empty)..."
-            touch /etc/caddy/Caddyfile
-        fi
-        
-        # Ensure caddy-manager can read and write the Caddyfile
-        # Change ownership to caddy-manager user
-        chown "$SERVICE_USER:$SERVICE_GROUP" /etc/caddy/Caddyfile
-        # Set permissions: rw-rw---- (660) allows caddy-manager and group to read/write
-        chmod 660 /etc/caddy/Caddyfile
-        log_info "✓ Caddyfile permissions set for $SERVICE_USER (rw-rw----)"
-        
-        # Also ensure caddy-manager can read the /etc/caddy directory itself
-        # This is needed to list and access files in the directory
-        log_info "Setting directory permissions..."
-        if ! getent group caddy &>/dev/null; then
-            # If caddy group doesn't exist, just set user permissions
-            chmod u+rx /etc/caddy
-        fi
-        
-        # Allow caddy-manager to reload/restart Caddy service without password
-        log_info "Setting up sudo rule for caddy service reload..."
-        tee /etc/sudoers.d/caddy-manager > /dev/null <<EOF
+    log_info "Fixing Caddyfile permissions..."
+    fix_permissions || {
+        log_error "Failed to fix permissions"
+        exit 1
+    }
+    
+    # Allow caddy-manager to reload/restart Caddy service without password
+    log_info "Setting up sudo rule for caddy service reload..."
+    tee /etc/sudoers.d/caddy-manager > /dev/null <<EOF
 # Allow caddy-manager to reload/restart Caddy without password
 $SERVICE_USER ALL=(ALL) NOPASSWD: /bin/systemctl reload caddy, /bin/systemctl restart caddy
 EOF
-        chmod 440 /etc/sudoers.d/caddy-manager
-        log_info "✓ Sudoers rule created for caddy-manager"
-    else
-        log_warn "/etc/caddy directory not found - skipping permission setup"
-    fi
+    chmod 440 /etc/sudoers.d/caddy-manager
+    log_info "✓ Sudoers rule created for caddy-manager"
     
     # Install systemd service
     log_info "Installing systemd service..."
