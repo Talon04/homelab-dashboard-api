@@ -8,20 +8,6 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/javascript/javascript.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/python/python.min.js"></script>
-<script>
-    document.addEventListener('DOMContentLoaded', async () => {
-        try {
-            const res = await fetch('/api/config/modules');
-            if (res.ok) {
-                const data = await res.json();
-                const enabled = Array.isArray(data.modules) ? data.modules : [];
-                if (!enabled.includes('code_editor')) {
-                    window.location.href = '/settings';
-                }
-            }
-        } catch (e) { }
-    });
-</script>
 {% endblock %}
 
 {% block content %}

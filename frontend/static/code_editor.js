@@ -2,7 +2,7 @@
  * =============================================================================
  * CODE_EDITOR.JS - Embedded code editor interface
  * =============================================================================
- * 
+ *
  * Provides a simple file browser and code editor for managing user scripts
  * stored in the user_code directory. Supports Python and JavaScript files.
  */

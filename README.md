@@ -4,7 +4,7 @@ This is a Flask-based dashboard for my homelab services.
 
 ## 🚀 Goal
 
-A self-hosted control panel to monitor and manage Docker containers and service health — eventually integrated with a Discord bot.
+A self-hosted control panel for Docker containers, container widgets, and DNS/reverse-proxy management.
 
 ## 📦 Tech
 

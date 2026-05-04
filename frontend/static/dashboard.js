@@ -1,11 +1,10 @@
 /**
  * =============================================================================
- * DASHBOARD.JS - Main containers dashboard logic
+ * DASHBOARD.JS - Secondary containers dashboard logic
  * =============================================================================
  * 
  * Handles rendering of Docker compose projects and their containers,
- * including port configurations, link management, monitoring toggles
- * and widget display.
+ * including port configurations, link management and widget display.
  */
 
 // =============================================================================
@@ -16,15 +15,12 @@ let IP_FOR_INTERNAL_LINKS = "127.0.0.1";
 let IP_FOR_EXPOSED_LINKS = "127.0.0.1";
 let expandedCompose = null;
 let composeMap = {};
-let MONITOR_MODULE_ENABLED = false;
-let CODE_MODULE_ENABLED = false;
 window.addEventListener("DOMContentLoaded", async () => {
   // Load IP config first from separate endpoints
   try {
-    const [internalRes, externalRes, modulesRes] = await Promise.all([
+    const [internalRes, externalRes] = await Promise.all([
       fetch("/api/config/internal_ip"),
-      fetch("/api/config/external_ip"),
-      fetch("/api/config/modules")
+      fetch("/api/config/external_ip")
     ]);
 
     if (internalRes.ok) {
@@ -35,13 +31,6 @@ window.addEventListener("DOMContentLoaded", async () => {
     if (externalRes.ok) {
       const externalData = await externalRes.json();
       IP_FOR_EXPOSED_LINKS = externalData.external_ip;
-    }
-
-    if (modulesRes && modulesRes.ok) {
-      const modulesData = await modulesRes.json();
-      const mods = Array.isArray(modulesData.modules) ? modulesData.modules : [];
-      MONITOR_MODULE_ENABLED = mods.includes('monitor');
-      CODE_MODULE_ENABLED = mods.includes('code_editor');
     }
 
     console.log(`Loaded IP config: Internal=${IP_FOR_INTERNAL_LINKS}, External=${IP_FOR_EXPOSED_LINKS}`);
@@ -178,20 +167,6 @@ window.addEventListener("DOMContentLoaded", async () => {
       console.warn("Error getting exposed containers:", err);
     }
 
-    // Check monitor state for this container (only if monitor module enabled)
-    let isMonitored = false;
-    if (MONITOR_MODULE_ENABLED) {
-      try {
-        const monRes = await fetch(`/api/monitor/container/${container.id}`);
-        if (monRes.ok) {
-          const monData = await monRes.json();
-          isMonitored = !!monData.enabled;
-        }
-      } catch (err) {
-        console.warn("Error getting monitor state for", container.id, err);
-      }
-    }
-
     // Check for custom link bodies (internal and external separately)
     let customInternalLinkBody = null;
     let customExternalLinkBody = null;
@@ -244,18 +219,6 @@ window.addEventListener("DOMContentLoaded", async () => {
     const div = document.createElement("div");
     div.className = "bg-white p-4 rounded-lg shadow-md mb-2";
 
-    const monitorToggleBtn = MONITOR_MODULE_ENABLED
-      ? `<button class="text-xs px-2 py-1 rounded ${isMonitored ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-700'}" title="Toggle monitoring" onclick="toggleMonitor('${container.id}', ${!isMonitored})">
-           ${isMonitored ? 'Monitoring' : 'Monitor'}
-         </button>`
-      : '';
-
-    const WidgetEditBtn = CODE_MODULE_ENABLED
-      ? `<button class="text-xs px-2 py-1 bg-gray-100 hover:bg-gray-200 rounded" title="Widget edit mode" data-widget-toggle>
-            Widgets
-          </button>`
-      : '';
-
     // Create exposed toggle button (inline next to status)
     const exposedToggleBtn = `<button 
       class="ml-2 px-2 py-1 text-xs rounded ${isExposed ? 'bg-green-500 text-white' : 'bg-gray-300'}" 
@@ -269,10 +232,6 @@ window.addEventListener("DOMContentLoaded", async () => {
         <div>
           <strong>${container.name}</strong> - ${container.status} ${exposedToggleBtn}
         </div>
-        <div class="flex items-center gap-2">
-          ${monitorToggleBtn}
-          ${WidgetEditBtn}
-        </div>
       </div>
       <div class="mb-1">Image: <span class='font-mono text-xs'>${container.image || "-"}</span></div>
       <div class="mb-1">Ports: ${portText}</div>
@@ -281,7 +240,7 @@ window.addEventListener("DOMContentLoaded", async () => {
       <div class="mt-3 border-t pt-3">
         <div class="flex items-center justify-between mb-2">
           <span class="text-sm text-gray-600">Widgets</span>
-          <div class="hidden gap-2" data-widget-toolbar>
+          <div class="flex gap-2" data-widget-toolbar>
             <button class="text-xs px-2 py-1 bg-blue-100 hover:bg-blue-200 rounded" data-add-text>Add Text</button>
             <button class="text-xs px-2 py-1 bg-blue-100 hover:bg-blue-200 rounded" data-add-button>Add Button</button>
           </div>
@@ -293,18 +252,11 @@ window.addEventListener("DOMContentLoaded", async () => {
 
     // Hook up widget UI
     const toolbar = div.querySelector('[data-widget-toolbar]');
-    const toggle = div.querySelector('[data-widget-toggle]');
     const widgetsEl = div.querySelector('[data-widgets]');
     const addTextBtn = div.querySelector('[data-add-text]');
     const addButtonBtn = div.querySelector('[data-add-button]');
 
-    if (CODE_MODULE_ENABLED && toggle && toolbar && addTextBtn && addButtonBtn) {
-      let editMode = false;
-      toggle.addEventListener('click', async () => {
-        editMode = !editMode;
-        if (editMode) { toolbar.classList.remove('hidden'); await renderWidgets(); }
-        else { toolbar.classList.add('hidden'); await renderWidgets(); }
-      });
+    if (toolbar && addTextBtn && addButtonBtn) {
       addTextBtn.addEventListener('click', async () => {
         const label = prompt('Text label (for identification)?', 'Text');
         const text = prompt('Initial text?', '');
@@ -357,24 +309,6 @@ window.addEventListener("DOMContentLoaded", async () => {
           title.textContent = `${w.type === 'button' ? 'Button' : 'Text'}: ${w.label || ''}${intervalText}`;
           const actions = document.createElement('div');
           actions.className = 'flex items-center gap-2';
-          const changeScript = document.createElement('button');
-          changeScript.className = 'text-xs text-blue-600 hover:underline';
-          changeScript.textContent = 'Script';
-          changeScript.addEventListener('click', async () => {
-            const current = w.file_path || '';
-            const nextPath = prompt('Enter script path (relative to user_code, e.g. widgets/..../script.py):', current);
-            if (nextPath === null) return;
-            try {
-              await fetch('/api/containers/' + encodeURIComponent(container.id) + '/widgets/' + w.id, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ file_path: nextPath || null })
-              });
-              await renderWidgets();
-            } catch (e) {
-              console.warn('Failed to update widget script path', e);
-            }
-          });
           const del = document.createElement('button');
           del.className = 'text-xs text-red-600 hover:underline';
           del.textContent = 'Delete';
@@ -383,7 +317,6 @@ window.addEventListener("DOMContentLoaded", async () => {
             await fetch('/api/containers/' + encodeURIComponent(container.id) + '/widgets/' + w.id, { method: 'DELETE' });
             await renderWidgets();
           });
-          actions.appendChild(changeScript);
           actions.appendChild(del);
           header.appendChild(title);
           header.appendChild(actions);
@@ -394,12 +327,6 @@ window.addEventListener("DOMContentLoaded", async () => {
             const p = document.createElement('div');
             p.className = 'text-sm';
             p.textContent = w.text || '';
-            p.title = 'Ctrl-Click to open script';
-            p.addEventListener('click', (ev) => {
-              if (ev.ctrlKey && w.file_path) {
-                window.open('/code?path=' + encodeURIComponent(w.file_path), '_blank');
-              }
-            });
             body.appendChild(p);
 
             // Auto-refresh display for text widgets with update_interval.
@@ -427,12 +354,8 @@ window.addEventListener("DOMContentLoaded", async () => {
             const btn = document.createElement('button');
             btn.className = 'px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600';
             btn.textContent = w.label || 'Run';
-            btn.title = 'Click to run. Ctrl-Click opens script.';
+            btn.title = 'Click to run';
             btn.addEventListener('click', async (ev) => {
-              if (ev.ctrlKey && w.file_path) {
-                window.open('/code?path=' + encodeURIComponent(w.file_path), '_blank');
-                return;
-              }
               // Run server-side Python by default
               if ((w.file_path || '').endsWith('.py') || !w.file_path) {
                 try {
@@ -524,31 +447,6 @@ window.toggleExposed = async function (containerId, exposed) {
   } catch (err) {
     console.error("Error toggling exposed status:", err);
     window.toastManager.error('Failed to update exposed status: ' + err.message);
-  }
-};
-
-window.toggleMonitor = async function (containerId, enabled) {
-  if (!MONITOR_MODULE_ENABLED) return;
-  try {
-    const res = await fetch(`/api/monitor/container/${encodeURIComponent(containerId)}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ enabled })
-    });
-
-    if (!res.ok) {
-      const errorData = await res.json().catch(() => ({}));
-      throw new Error(errorData.error || "Failed to update monitor state");
-    }
-
-    const currentExpanded = expandedCompose;
-    expandedCompose = currentExpanded;
-    await window.renderComposeList();
-
-    window.toastManager.success(`Monitoring ${enabled ? 'enabled' : 'disabled'}`);
-  } catch (err) {
-    console.error("Error toggling monitor state:", err);
-    window.toastManager.error('Failed to update monitor state: ' + err.message);
   }
 };
 

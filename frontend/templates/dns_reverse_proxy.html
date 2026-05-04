@@ -5,16 +5,6 @@
 {% block head_extra %}
 <script>
     document.addEventListener('DOMContentLoaded', async () => {
-        try {
-            const res = await fetch('/api/config/modules');
-            if (res.ok) {
-                const data = await res.json();
-                const enabled = Array.isArray(data.modules) ? data.modules : [];
-                if (!enabled.includes('dns_reverse_proxy')) {
-                    window.location.href = '/settings';
-                }
-            }
-        } catch (e) { }
     });
 </script>
 {% endblock %}

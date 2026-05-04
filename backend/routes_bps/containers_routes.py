@@ -1,7 +1,7 @@
 # =============================================================================
 # CONTAINERS ROUTES - Container and widget API endpoints
 # =============================================================================
-"""API routes for containers, VMs and container widgets."""
+"""API routes for containers and container widgets."""
 
 import time
 
@@ -58,7 +58,7 @@ def _generate_widget_script_path(container_id: str, widget_type: str) -> str:
 
 
 # =============================================================================
-# CONTAINER & VM LISTING
+# CONTAINER LISTING
 # =============================================================================
 
 
@@ -77,14 +77,6 @@ def get_container_docker_id(db_id):
     if docker_id is None:
         return jsonify({"error": "Container not found"}), 404
     return jsonify({"docker_id": docker_id})
-
-
-@containers_bp.route("/api/vms")
-@containers_bp.route("/api/data/vms")
-def list_vms():
-    """Return all VMs stored in the database."""
-    sm = get_save_manager()
-    return jsonify(sm.get_all_vms())
 
 
 # =============================================================================

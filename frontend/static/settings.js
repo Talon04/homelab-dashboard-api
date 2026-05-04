@@ -24,17 +24,6 @@ window.addEventListener("DOMContentLoaded", async () => {
 
 async function loadSettings() {
   try {
-    // Load modules enabled + order and render list
-    await loadModulesUI();
-    // Update nav based on current modules
-    try {
-      const res = await fetch('/api/config/modules');
-      if (res.ok) {
-        const data = await res.json();
-        updateNavFromModules(Array.isArray(data.modules) ? data.modules : []);
-      }
-    } catch (e) { }
-
     // Check if this is first boot
     const firstBootRes = await fetch("/api/config/first_boot");
     const firstBootData = await firstBootRes.json();
@@ -55,21 +44,15 @@ async function loadSettings() {
     const proxyRes = await fetch("/api/config/proxy_count");
     const proxyData = await proxyRes.json();
 
-    // Load retention days configuration
-    const retentionRes = await fetch("/api/config/retention_days");
-    const retentionData = await retentionRes.json();
-
     document.getElementById("internal-ip").value = internalIpData.internal_ip || "127.0.0.1";
     document.getElementById("external-ip").value = externalIpData.external_ip || "127.0.0.1";
     document.getElementById("proxy-count").value = proxyData.proxy_count || 0;
-    document.getElementById("retention-days").value = retentionData.retention_days || 30;
 
     // Store current settings
     currentSettings = {
       internal_ip: internalIpData.internal_ip || "127.0.0.1",
       external_ip: externalIpData.external_ip || "127.0.0.1",
-      proxy_count: proxyData.proxy_count || 0,
-      retention_days: retentionData.retention_days || 30
+      proxy_count: proxyData.proxy_count || 0
     };
 
   } catch (err) {
@@ -84,7 +67,6 @@ async function saveSettings() {
     const internalIp = document.getElementById("internal-ip").value.trim();
     const externalIp = document.getElementById("external-ip").value.trim();
     const proxyCount = parseInt(document.getElementById("proxy-count").value) || 0;
-    const retentionDays = parseInt(document.getElementById("retention-days").value) || 0;
 
     // Validate inputs
     if (!isValidIP(internalIp)) {
@@ -99,11 +81,6 @@ async function saveSettings() {
 
     if (proxyCount < 0) {
       showStatus("Proxy count cannot be negative", "error");
-      return;
-    }
-
-    if (retentionDays < 0) {
-      showStatus("Retention days cannot be negative", "error");
       return;
     }
 
@@ -146,31 +123,14 @@ async function saveSettings() {
       throw new Error("Failed to save proxy settings");
     }
 
-    // Save retention days
-    const retentionRes = await fetch("/api/config/retention_days", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        retention_days: retentionDays
-      })
-    });
-
-    if (!retentionRes.ok) {
-      throw new Error("Failed to save retention settings");
-    }
-
-    // Save module configuration (enabled + order + per-module configs)
-    await saveModules();
-
     // Update current settings
     currentSettings = {
       internal_ip: internalIp,
       external_ip: externalIp,
-      proxy_count: proxyCount,
-      retention_days: retentionDays
+      proxy_count: proxyCount
     };
 
-    showStatus("Settings and modules saved successfully!", "success");
+    showStatus("Settings saved successfully!", "success");
 
   } catch (err) {
     console.error("Failed to save settings:", err);
@@ -196,352 +156,17 @@ async function completeSetup() {
       throw new Error("Failed to complete setup");
     }
 
-    showStatus("Setup completed successfully! Redirecting to dashboard...", "success");
+    showStatus("Setup completed successfully! Redirecting to services...", "success");
 
-    // Redirect to dashboard after a short delay
+    // Redirect to the main services page after a short delay
     setTimeout(() => {
-      window.location.href = "/containers";
+      window.location.href = "/services";
     }, 2000);
 
   } catch (err) {
     console.error("Failed to complete setup:", err);
     showStatus("Failed to complete setup: " + err.message, "error");
   }
-}
-
-async function saveModules() {
-  const state = getModulesStateFromUI();
-  // Save enabled list
-  const res = await fetch("/api/config/modules", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ modules: state.enabled })
-  });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.error || "Failed to save modules");
-  }
-  // Save order
-  const res2 = await fetch("/api/config/modules_order", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ order: state.order })
-  });
-  if (!res2.ok) {
-    const err2 = await res2.json().catch(() => ({}));
-    throw new Error(err2.error || "Failed to save modules order");
-  }
-  // Save per-module configs
-  for (const [mid, cfg] of Object.entries(state.configs || {})) {
-    const resCfg = await fetch(`/api/config/module/${mid}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(cfg)
-    });
-    if (!resCfg.ok) {
-      const e3 = await resCfg.json().catch(() => ({}));
-      throw new Error(e3.error || `Failed to save config for ${mid}`);
-    }
-  }
-  updateNavFromModules(state.enabled);
-}
-
-async function loadModulesUI() {
-  const list = document.getElementById('modules-list');
-  if (!list) return;
-  const available = [
-    { id: 'containers', label: 'Containers' },
-    { id: 'monitor', label: 'Monitor' , config: {
-      polling_rate: { label: 'Polling Rate for Statistics and Monitor Events in seconds', type: 'number', placeholder: '10' }
-    }},
-    {
-      id: 'proxmox', label: 'Proxmox VMs', config: {
-        api_url: { label: 'API URL', type: 'text', placeholder: 'https://host:8006/api2/json' },
-        token_id: { label: 'Token ID', type: 'text', placeholder: 'root@pam!mytoken' },
-        token_secret: { label: 'Token Secret', type: 'password', placeholder: '********' },
-        verify_ssl: { label: 'Verify SSL', type: 'checkbox' },
-        node: { label: 'Node (optional)', type: 'text', placeholder: 'pve' }
-      },
-      tests: [
-        { id: 'proxmox', label: 'Test Proxmox API' }
-      ]
-    },
-    { id: 'code_editor', label: 'Code Editor' },
-    {
-      id: 'notifications', label: 'Notifications', config: {
-        polling_rate: { label: 'Polling Rate for Notifications in seconds (This is the rate at which the sending of notifications is checked)', type: 'number', placeholder: '60' }
-      }
-    },
-    {
-      id: 'dns_reverse_proxy', label: 'DNS/Reverse Proxy', config: {
-        reverse_proxy_provider: {
-          label: 'Reverse Proxy Provider',
-          type: 'select',
-          options: [{ value: 'caddy', label: 'Caddy' }],
-          default: 'caddy'
-        },
-        dns_provider: {
-          label: 'DNS Provider',
-          type: 'select',
-          options: [{ value: 'opnsense', label: 'OPNsense' }],
-          default: 'opnsense'
-        },
-        default_domain: { label: 'Default Domain (for builder)', type: 'text', placeholder: 'example.com' },
-        caddy_agent_host: { label: 'Caddy Agent Host', type: 'text', placeholder: '192.168.1.50' },
-        caddy_agent_port: { label: 'Caddy Agent Port', type: 'number', placeholder: '9999', default: 9999 },
-        caddy_agent_scheme: { label: 'Caddy Agent Scheme', type: 'select', options: [{ value: 'http', label: 'HTTP' }, { value: 'https', label: 'HTTPS' }], default: 'http' },
-        caddy_agent_verify_ssl: { label: 'Verify Caddy Agent SSL', type: 'checkbox', default: true },
-        opnsense_api_url: { label: 'OPNsense API URL', type: 'text', placeholder: 'https://opnsense.example.com' },
-        opnsense_api_key: { label: 'OPNsense API Key', type: 'text', placeholder: 'api-key' },
-        opnsense_api_secret: { label: 'OPNsense API Secret', type: 'password', placeholder: '********' },
-        opnsense_verify_ssl: { label: 'Verify OPNsense SSL', type: 'checkbox', default: true }
-      },
-      tests: [
-        { id: 'caddy', label: 'Test Caddy API' },
-        { id: 'opnsense', label: 'Test OPNsense API' }
-      ]
-    }
-  ];
-  let enabled = ["containers"];
-  let order = ["containers"];
-  try {
-    const [modsRes, orderRes] = await Promise.all([
-      fetch('/api/config/modules'),
-      fetch('/api/config/modules_order')
-    ]);
-    if (modsRes.ok) {
-      const data = await modsRes.json();
-      if (Array.isArray(data.modules)) enabled = data.modules;
-    }
-    if (orderRes.ok) {
-      const data2 = await orderRes.json();
-      if (Array.isArray(data2.order) && data2.order.length) order = data2.order;
-    }
-  } catch (e) {
-    // keep defaults
-  }
-  // Render according to order
-  list.innerHTML = '';
-  const byId = Object.fromEntries(available.map(m => [m.id, m]));
-  const ordered = order.filter(id => byId[id]).concat(available.map(m => m.id).filter(id => !order.includes(id)));
-  for (let idx = 0; idx < ordered.length; idx++) {
-    const id = ordered[idx];
-    const meta = byId[id];
-    // Card that holds the row + optional config so they move together
-    const card = document.createElement('div');
-    card.className = 'flex flex-col items-start gap-2 border border-gray-200 rounded-md px-3 py-2 bg-gray-50 min-w-[180px]';
-    card.dataset.moduleId = id;
-
-    const row = document.createElement('div');
-    row.className = 'flex items-center gap-3';
-    const checkbox = document.createElement('input');
-    checkbox.type = 'checkbox';
-    checkbox.className = 'h-4 w-4';
-    checkbox.checked = enabled.includes(id);
-    const label = document.createElement('span');
-    label.textContent = meta.label;
-    const up = document.createElement('button');
-    up.type = 'button';
-    up.className = 'px-2 py-1 text-sm bg-gray-100 rounded hover:bg-gray-200 module-move-btn';
-    up.textContent = '<';
-    up.disabled = idx === 0;
-    up.addEventListener('click', () => moveModule(card, -1));
-    const down = document.createElement('button');
-    down.type = 'button';
-    down.className = 'px-2 py-1 text-sm bg-gray-100 rounded hover:bg-gray-200 module-move-btn';
-    down.textContent = '>';
-    down.disabled = idx === ordered.length - 1;
-    down.addEventListener('click', () => moveModule(card, +1));
-    row.appendChild(checkbox);
-    row.appendChild(label);
-    row.appendChild(up);
-    row.appendChild(down);
-    card.appendChild(row);
-
-    // Configuration panel per module (if defined)
-    if (meta.config) {
-      const details = document.createElement('details');
-      details.className = 'w-full';
-      const summary = document.createElement('summary');
-      summary.className = 'cursor-pointer select-none text-gray-600';
-      summary.textContent = `Configure ${meta.label}`;
-      details.appendChild(summary);
-      const panel = document.createElement('div');
-      panel.className = 'mt-3 grid grid-cols-1 md:grid-cols-2 gap-3';
-
-      // Load module config
-      let modConfig = {};
-      try {
-        const resp = await fetch(`/api/config/module/${id}`);
-        if (resp.ok) modConfig = await resp.json();
-      } catch (e) { }
-
-      for (const [key, field] of Object.entries(meta.config)) {
-        const wrap = document.createElement('div');
-        const lab = document.createElement('label');
-        lab.className = 'block text-sm text-gray-700 mb-1';
-        lab.textContent = field.label;
-        wrap.appendChild(lab);
-        let input;
-        if (field.type === 'checkbox') {
-          input = document.createElement('input');
-          input.type = 'checkbox';
-          input.className = 'h-4 w-4';
-          const fallback = (field.default !== undefined) ? field.default : (key.endsWith('verify_ssl') || key === 'verify_ssl');
-          input.checked = Boolean(modConfig[key] ?? fallback);
-        } else if (field.type === 'select') {
-          input = document.createElement('select');
-          input.className = 'w-full px-3 py-2 border border-gray-300 rounded-md';
-          const options = Array.isArray(field.options) ? field.options : [];
-          options.forEach((option) => {
-            const opt = document.createElement('option');
-            if (typeof option === 'string') {
-              opt.value = option;
-              opt.textContent = option;
-            } else {
-              opt.value = option.value;
-              opt.textContent = option.label || option.value;
-            }
-            input.appendChild(opt);
-          });
-          const fallbackValue = field.default ?? (options[0] && (typeof options[0] === 'string' ? options[0] : options[0].value)) ?? '';
-          input.value = String(modConfig[key] ?? fallbackValue);
-        } else {
-          input = document.createElement('input');
-          input.type = field.type || 'text';
-          input.className = 'w-full px-3 py-2 border border-gray-300 rounded-md';
-          if (field.placeholder) input.placeholder = field.placeholder;
-          input.value = String(modConfig[key] ?? '');
-        }
-        input.dataset.moduleId = id;
-        input.dataset.configKey = key;
-        wrap.appendChild(input);
-        panel.appendChild(wrap);
-      }
-
-      if (Array.isArray(meta.tests) && meta.tests.length > 0) {
-        const testWrap = document.createElement('div');
-        testWrap.className = 'mt-3 flex flex-wrap items-center gap-2';
-
-        meta.tests.forEach((testMeta) => {
-          const btn = document.createElement('button');
-          btn.type = 'button';
-          btn.className = 'px-3 py-1.5 text-sm bg-blue-500 text-white rounded hover:bg-blue-600';
-          btn.textContent = testMeta.label;
-          btn.dataset.moduleId = id;
-          btn.dataset.testId = testMeta.id;
-          btn.addEventListener('click', () => testModuleApi(card, id, testMeta));
-          testWrap.appendChild(btn);
-        });
-
-        const status = document.createElement('span');
-        status.className = 'text-xs text-gray-600';
-        status.dataset.testStatusFor = id;
-        testWrap.appendChild(status);
-
-        details.appendChild(testWrap);
-      }
-
-      details.appendChild(panel);
-      card.appendChild(details);
-    }
-    list.appendChild(card);
-  }
-}
-
-function moveModule(rowEl, delta) {
-  const parent = rowEl.parentElement;
-  if (!parent) return;
-  const nodes = Array.from(parent.children);
-  const idx = nodes.indexOf(rowEl);
-  const newIdx = idx + delta;
-  if (newIdx < 0 || newIdx >= nodes.length) return;
-  parent.insertBefore(rowEl, delta < 0 ? nodes[newIdx] : nodes[newIdx].nextSibling);
-  // Update disabled states
-  Array.from(parent.children).forEach((el, i) => {
-    const buttons = el.querySelectorAll('.module-move-btn');
-    if (buttons.length === 2) {
-      buttons[0].disabled = i === 0;
-      buttons[1].disabled = i === parent.children.length - 1;
-    }
-  });
-}
-
-function getModulesStateFromUI() {
-  const list = document.getElementById('modules-list');
-  const rows = Array.from(list ? list.querySelectorAll('div[data-module-id]') : []);
-  const order = rows.map(el => el.dataset.moduleId);
-  const enabled = rows.filter(el => el.querySelector('input[type="checkbox"]').checked).map(el => el.dataset.moduleId);
-  // Collect per-module configs
-  const configs = {};
-  const inputs = Array.from(list ? list.querySelectorAll('[data-module-id][data-config-key]') : []);
-  inputs.forEach(inp => {
-    const mid = inp.dataset.moduleId;
-    const key = inp.dataset.configKey;
-    const val = inp.type === 'checkbox' ? inp.checked : inp.value;
-    if (!configs[mid]) configs[mid] = {};
-    configs[mid][key] = val;
-  });
-  return { order, enabled, configs };
-}
-
-function getModuleConfigFromCard(card, moduleId) {
-  const config = {};
-  const inputs = Array.from(card.querySelectorAll('[data-module-id][data-config-key]'));
-  inputs.forEach((inp) => {
-    if (inp.dataset.moduleId !== moduleId) return;
-    const key = inp.dataset.configKey;
-    const val = inp.type === 'checkbox' ? inp.checked : inp.value;
-    config[key] = val;
-  });
-  return config;
-}
-
-async function testModuleApi(card, moduleId, testMeta) {
-  const status = card.querySelector(`[data-test-status-for="${moduleId}"]`);
-  if (status) {
-    status.textContent = 'Testing...';
-    status.className = 'text-xs text-blue-600';
-  }
-
-  const cfg = getModuleConfigFromCard(card, moduleId);
-
-  try {
-    const res = await fetch(`/api/config/module/${moduleId}/test/${testMeta.id}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ config: cfg })
-    });
-    const data = await res.json().catch(() => ({}));
-    if (res.ok && data.ok) {
-      if (status) {
-        status.textContent = data.message || 'API test succeeded';
-        status.className = 'text-xs text-green-700';
-      }
-      return;
-    }
-    if (status) {
-      const errText = data.error ? ` (${data.error})` : '';
-      status.textContent = `${data.message || 'API test failed'}${errText}`;
-      status.className = 'text-xs text-red-700';
-    }
-  } catch (err) {
-    if (status) {
-      status.textContent = `API test failed: ${err.message}`;
-      status.className = 'text-xs text-red-700';
-    }
-  }
-}
-
-function updateNavFromModules(enabled) {
-  const showContainers = Array.isArray(enabled) && enabled.includes('containers');
-  document.querySelectorAll('a[href="/containers"]').forEach(el => {
-    if (showContainers) {
-      el.classList.remove('hidden');
-    } else {
-      el.classList.add('hidden');
-    }
-  });
 }
 
 async function resetSettings() {

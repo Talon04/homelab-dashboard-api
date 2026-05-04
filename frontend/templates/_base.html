@@ -4,34 +4,42 @@
 <head>
     <title>{% block title %}Homelab Dashboard{% endblock %}</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', async () => {
+            try {
+                const res = await fetch('/api/config/modules');
+                if (res.ok) {
+                    const data = await res.json();
+                    const enabled = Array.isArray(data.modules) ? data.modules : [];
+                    if (!enabled.includes('containers')) {
+                        document.querySelectorAll('a[href="/containers"]').forEach(el => el.classList.add('hidden'));
+                    }
+                }
+            } catch (e) { }
+        });
+    </script>
     {% block head_extra %}{% endblock %}
 </head>
 
 <body class="bg-gray-100">
     <div class="container mx-auto p-4">
-        <div class="grid grid-cols-3 items-center mb-6">
-            <div class="justify-self-start flex items-center gap-2">
-                <a id="nav-left-arrow" href="/settings" class="text-blue-600 hover:text-blue-800">◀</a>
-                <a id="nav-left-link" href="/settings" class="text-sm text-gray-700 hover:text-blue-700">Settings</a>
-            </div>
-            <div class="justify-self-center">
-                <h1 class="text-2xl font-bold text-center">Homelab Dashboard</h1>
-            </div>
-            <div class="justify-self-end flex items-center gap-2">
-                {% include '_notifications.html' %}
-                <a id="nav-right-link" href="/settings" class="text-sm text-gray-700 hover:text-blue-700">Settings</a>
-                <a id="nav-right-arrow" href="/settings" class="text-blue-600 hover:text-blue-800">▶</a>
+        <div class="mb-6 rounded-xl bg-white shadow-sm border border-gray-200 px-4 py-3">
+            <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                <div>
+                    <h1 class="text-2xl font-bold text-gray-900">Homelab Dashboard</h1>
+                    <p class="text-sm text-gray-500">Services first, containers secondary.</p>
+                </div>
+                <nav class="flex flex-wrap gap-2 text-sm font-medium">
+                    <a href="/services" class="px-3 py-2 rounded-md bg-blue-600 text-white hover:bg-blue-700">Services</a>
+                    <a href="/containers" class="px-3 py-2 rounded-md bg-gray-100 text-gray-700 hover:bg-gray-200">Containers</a>
+                    <a href="/dns-reverse-proxy" class="px-3 py-2 rounded-md bg-gray-100 text-gray-700 hover:bg-gray-200">DNS / Reverse Proxy</a>
+                    <a href="/settings" class="px-3 py-2 rounded-md bg-gray-100 text-gray-700 hover:bg-gray-200">Settings</a>
+                </nav>
             </div>
         </div>
 
         {% block content %}{% endblock %}
     </div>
-
-    {% include '_notifications_modals.html' %}
-
-    <script src="/static/nav.js" defer></script>
-    <script src="/static/custom_loader.js" defer></script>
-    <script src="/static/notifications.js" defer></script>
     {% block scripts %}{% endblock %}
 </body>
 

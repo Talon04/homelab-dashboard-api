@@ -5,12 +5,10 @@
 Database persistence manager for the dashboard backend.
 
 This module provides a SQLite-backed data layer via SQLAlchemy for storing
-container metadata, widgets, monitor configurations and VM information.
+container metadata, ports, and widgets.
 Configuration (JSON) is handled separately by ConfigManager.
 """
 
-import os
-import json
 from typing import Any, Dict, List, Optional
 from contextlib import contextmanager
 
@@ -20,22 +18,15 @@ try:
         DatabaseManager,
         Container,
         ContainerPort,
-        VM,
         ContainerWidget,
-        MonitorBodies,
-        MonitorPoints,
     )
     from sqlalchemy.orm import Session
-    from sqlalchemy import and_
 except ImportError:
     # Fallback for when SQLAlchemy is not installed
     DatabaseManager = None
     Container = None
     ContainerPort = None
-    VM = None
     ContainerWidget = None
-    MonitorBodies = None
-    MonitorPoints = None
     Session = None
 
 
@@ -360,42 +351,6 @@ class SaveManager:
                 for container in containers
             ]
 
-    # -------------------------------------------------------------------------
-    # VM Listing
-    # -------------------------------------------------------------------------
-
-    def get_all_vms(self) -> List[Dict]:
-        """Get all VMs"""
-        if self.db_manager is None:
-            return []
-
-        with self.get_db_session() as session:
-            if session is None:
-                return []
-
-            vms = session.query(VM).all()
-            return [
-                {
-                    # External Proxmox ID is the primary identifier for callers
-                    "id": vm.proxmox_id,
-                    "db_id": vm.id,
-                    "proxmox_id": vm.proxmox_id,
-                    "name": vm.name,
-                    "status": vm.status,
-                    "cpu_cores": vm.cpu_cores,
-                    "memory_mb": vm.memory_mb,
-                    "disk_gb": vm.disk_gb,
-                    "ip_address": vm.ip_address,
-                    "preferred_port": vm.preferred_port,
-                    "internal_link_body": vm.internal_link_body,
-                    "external_link_body": vm.external_link_body,
-                    "is_exposed": vm.is_exposed,
-                    "created_at": vm.created_at.isoformat() if vm.created_at else None,
-                    "updated_at": vm.updated_at.isoformat() if vm.updated_at else None,
-                }
-                for vm in vms
-            ]
-
     def get_containers_by_widget(self, widget_id: int) -> List[Dict]:
         """Return all containers that have the given widget attached."""
 
@@ -637,288 +592,6 @@ class SaveManager:
                 return False
             session.delete(w)
             return True
-
-    # -------------------------------------------------------------------------
-    # Monitor Configuration
-    # -------------------------------------------------------------------------
-
-    def get_monitor_for_container(self, container_id: str) -> Optional[Dict[str, Any]]:
-        """Return monitor configuration for a given container, if any."""
-        if self.db_manager is None or MonitorBodies is None:
-            return None
-
-        with self.get_db_session() as session:
-            if session is None:
-                return None
-            # container_id argument is Docker ID; resolve to internal PK
-            cont = self._get_container_row_by_docker_id(session, container_id)
-            if cont is None:
-                return None
-
-            md = (
-                session.query(MonitorBodies)
-                .filter(MonitorBodies.container_id == cont.id)
-                .first()
-            )
-            if not md:
-                return None
-            # Parse event_severity_settings from JSON if present
-            event_severity_settings = None
-            if md.event_severity_settings:
-                try:
-                    event_severity_settings = json.loads(md.event_severity_settings)
-                except Exception:
-                    pass
-            return {
-                "id": md.id,
-                "name": md.name,
-                "container_id": md.container_id,
-                "docker_id": cont.docker_id,  # Include the actual Docker ID
-                "vm_id": md.vm_id,
-                "monitor_type": md.monitor_type,
-                "enabled": bool(md.enabled),
-                "event_severity_settings": event_severity_settings,
-            }
-
-    def set_monitor_for_container(
-        self,
-        container_id: str,
-        enabled: bool,
-        monitor_type: str = "docker",
-        name: str = None,
-        event_severity_settings: dict = None,
-    ) -> Optional[Dict[str, Any]]:
-        """Create or update monitor configuration for a container.
-
-        A single MonitorData row is kept per container; this toggles the
-        ``enabled`` flag and initialises sensible defaults on first use.
-        """
-
-        if self.db_manager is None or MonitorBodies is None:
-            return None
-
-        with self.get_db_session() as session:
-            if session is None:
-                return None
-            cont = self._get_container_row_by_docker_id(session, container_id)
-            if cont is None:
-                # Auto-create container row if it doesn't exist
-                if Container is None:
-                    return None
-
-                container_name = f"container_{container_id[:8]}"
-                container_image = "unknown"
-                container_status = "unknown"
-
-                try:
-                    from backend import docker_utils
-
-                    containers = docker_utils.list_containers()
-                    docker_container = next(
-                        (c for c in containers if c.get("id") == container_id), None
-                    )
-
-                    if docker_container:
-                        container_name = docker_container.get("name", container_name)
-                        container_image = docker_container.get("image", container_image)
-                        container_status = docker_container.get(
-                            "state", container_status
-                        )
-                except Exception as e:
-                    print(
-                        f"Warning: Could not get container data for {container_id}: {e}"
-                    )
-
-                cont = Container(
-                    docker_id=container_id,
-                    name=container_name,
-                    image=container_image,
-                    status=container_status,
-                )
-                session.add(cont)
-                session.flush()
-
-            md = (
-                session.query(MonitorBodies)
-                .filter(MonitorBodies.container_id == cont.id)
-                .first()
-            )
-            # Serialize event_severity_settings to JSON if provided
-            event_severity_settings_json = None
-            if event_severity_settings is not None:
-                event_severity_settings_json = json.dumps(event_severity_settings)
-
-            if md is None:
-                md = MonitorBodies(
-                    container_id=cont.id,
-                    monitor_type=str(monitor_type or "docker"),
-                    enabled=bool(enabled),
-                    name=name or f"Monitor: {cont.name}",
-                    event_severity_settings=event_severity_settings_json,
-                )
-                session.add(md)
-                session.flush()
-            else:
-                md.enabled = bool(enabled)
-                # Only set defaults if fields are missing
-                if not md.monitor_type:
-                    md.monitor_type = str(monitor_type or "docker")
-                if name:
-                    md.name = name
-                if event_severity_settings_json is not None:
-                    md.event_severity_settings = event_severity_settings_json
-
-            # Parse back event_severity_settings for return
-            parsed_settings = None
-            if md.event_severity_settings:
-                try:
-                    parsed_settings = json.loads(md.event_severity_settings)
-                except Exception:
-                    pass
-
-            return {
-                "id": md.id,
-                "name": md.name,
-                "container_id": md.container_id,
-                "vm_id": md.vm_id,
-                "monitor_type": md.monitor_type,
-                "enabled": bool(md.enabled),
-                "event_severity_settings": parsed_settings,
-            }
-
-    def get_all_monitor_bodies(self) -> List[Dict[str, Any]]:
-        """Get all monitor_bodies (monitor configurations for containers/VMs)."""
-        if self.db_manager is None or MonitorBodies is None:
-            return []
-
-        with self.get_db_session() as session:
-            if session is None:
-                return []
-
-            entries = session.query(MonitorBodies).all()
-            result = []
-            for md in entries:
-                # Parse event_severity_settings from JSON
-                event_severity_settings = None
-                if md.event_severity_settings:
-                    try:
-                        event_severity_settings = json.loads(md.event_severity_settings)
-                    except Exception:
-                        pass
-                result.append(
-                    {
-                        "id": md.id,
-                        "name": md.name,
-                        "container_id": md.container_id,
-                        "vm_id": md.vm_id,
-                        "monitor_type": md.monitor_type,
-                        "enabled": bool(md.enabled),
-                        "event_severity_settings": event_severity_settings,
-                    }
-                )
-            return result
-
-    def get_latest_monitor_point(
-        self, monitor_body_id: int
-    ) -> Optional[Dict[str, Any]]:
-        """Return the latest monitor point for a given monitor body ID."""
-        if self.db_manager is None or MonitorPoints is None:
-            return None
-
-        with self.get_db_session() as session:
-            if session is None:
-                return None
-
-            mp = (
-                session.query(MonitorPoints)
-                .filter(MonitorPoints.monitor_body_id == monitor_body_id)
-                .order_by(MonitorPoints.timestamp.desc())
-                .first()
-            )
-            if not mp:
-                return None
-
-            return {
-                "id": mp.id,
-                "monitor_body_id": mp.monitor_body_id,
-                "timestamp": mp.timestamp.isoformat() if mp.timestamp else None,
-                "value": mp.value,
-            }
-
-    # -------------------------------------------------------------------------
-    # VM CRUD
-    # -------------------------------------------------------------------------
-
-    def _get_vm_row_by_proxmox_id(self, session, proxmox_id: str):
-        """Return the VM row for a given Proxmox ID, or None."""
-        if not proxmox_id or VM is None:
-            return None
-        return session.query(VM).filter(VM.proxmox_id == str(proxmox_id)).first()
-
-    def get_vm(self, vm_id: str) -> Optional[Dict]:
-        """Get VM data by Proxmox ID (external identifier)."""
-        if self.db_manager is None:
-            return None
-
-        with self.get_db_session() as session:
-            if session is None:
-                return None
-
-            vm = self._get_vm_row_by_proxmox_id(session, vm_id)
-            if vm:
-                return {
-                    "id": vm.proxmox_id,
-                    "db_id": vm.id,
-                    "name": vm.name,
-                    "status": vm.status,
-                    "cpu_cores": vm.cpu_cores,
-                    "memory_mb": vm.memory_mb,
-                    "disk_gb": vm.disk_gb,
-                    "ip_address": vm.ip_address,
-                    "preferred_port": vm.preferred_port,
-                    "internal_link_body": vm.internal_link_body,
-                    "external_link_body": vm.external_link_body,
-                    "is_exposed": vm.is_exposed,
-                    "created_at": vm.created_at.isoformat() if vm.created_at else None,
-                    "updated_at": vm.updated_at.isoformat() if vm.updated_at else None,
-                }
-            return None
-
-    def save_vm(self, vm_data: Dict):
-        """Save or update VM data"""
-        if self.db_manager is None:
-            return
-
-        with self.get_db_session() as session:
-            if session is None:
-                return
-
-            vm_ext_id = vm_data.get("proxmox_id") or vm_data.get("id")
-            if not vm_ext_id:
-                return
-
-            # Check if VM exists
-            vm = self._get_vm_row_by_proxmox_id(session, vm_ext_id)
-
-            if vm:
-                # Update existing VM
-                for key, value in vm_data.items():
-                    if key == "id":
-                        # never overwrite internal PK
-                        continue
-                    if key == "proxmox_id":
-                        setattr(vm, "proxmox_id", value)
-                        continue
-                    if hasattr(vm, key):
-                        setattr(vm, key, value)
-            else:
-                # Create new VM
-                clean_data = dict(vm_data)
-                clean_data.pop("id", None)
-                clean_data.setdefault("proxmox_id", vm_ext_id)
-                vm = VM(**clean_data)
-                session.add(vm)
-
 
 # =============================================================================
 # GLOBAL INSTANCE

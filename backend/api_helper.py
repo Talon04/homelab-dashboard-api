@@ -1203,72 +1203,6 @@ def get_dns_provider_config_link() -> Dict[str, Any]:
     return {"ok": False, "error": f"Unsupported DNS provider: {dns_provider}"}
 
 
-def _build_proxmox_headers(cfg: Dict[str, Any]) -> Dict[str, str]:
-    headers: Dict[str, str] = {"Accept": "application/json"}
-    token_id = str(cfg.get("token_id") or "").strip()
-    token_secret = str(cfg.get("token_secret") or "").strip()
-    if token_id and token_secret:
-        headers["Authorization"] = f"PVEAPIToken={token_id}={token_secret}"
-    return headers
-
-
-def test_proxmox_api(cfg: Dict[str, Any]) -> Dict[str, Any]:
-    """Test Proxmox API reachability and authentication."""
-    base_url = str(cfg.get("api_url") or "").strip().rstrip("/")
-    if not base_url:
-        result = {"ok": False, "message": "Missing Proxmox API URL", "error": "api_url is required"}
-        print(f"FAIL [api_helper] test_proxmox_api missing api_url")
-        return result
-
-    verify_ssl = bool(cfg.get("verify_ssl", True))
-    version_url = (
-        f"{base_url}/version"
-        if not base_url.endswith("/version")
-        else base_url
-    )
-
-    result = http_request(
-        "GET",
-        version_url,
-        headers=_build_proxmox_headers(cfg),
-        parse_json=True,
-        verify_ssl=verify_ssl,
-    )
-
-    if result.get("ok"):
-        version = ""
-        payload = result.get("json")
-        if isinstance(payload, dict):
-            version = str((payload.get("data") or {}).get("version") or "")
-        msg = "Proxmox API reachable"
-        if version:
-            msg += f" (version {version})"
-        out = {"ok": True, "message": msg, "status": result.get("status")}
-        print(f"OK [api_helper] test_proxmox_api {msg}")
-        return out
-
-    status = int(result.get("status") or 0)
-    # 401/403 still proves endpoint is reachable but credentials are wrong.
-    if status in (401, 403):
-        out = {
-            "ok": False,
-            "message": "Proxmox API reachable but authentication failed",
-            "status": status,
-            "error": result.get("error") or result.get("body"),
-        }
-        print(f"FAIL [api_helper] test_proxmox_api authentication failed: {out['error']}")
-        return out
-
-    out = {
-        "ok": False,
-        "message": "Failed to connect to Proxmox API",
-        "status": status,
-        "error": result.get("error") or result.get("body"),
-    }
-    print(f"FAIL [api_helper] test_proxmox_api failed to connect: {out['error']}")
-    return out
-
-
 def test_caddy_api(cfg: Dict[str, Any]) -> Dict[str, Any]:
     """Test Caddy Agent reachability and status."""
     status_result = caddy_agent_client.get_status(cfg)
@@ -1290,7 +1224,6 @@ def test_caddy_api(cfg: Dict[str, Any]) -> Dict[str, Any]:
         "status": agent_status,
         "details": status_result.get("details", {})
     }
-    return out
 
 
 def test_opnsense_api(cfg: Dict[str, Any]) -> Dict[str, Any]:
@@ -1361,18 +1294,3 @@ def test_opnsense_api(cfg: Dict[str, Any]) -> Dict[str, Any]:
     return out
 
 
-def test_module_api(module_id: str, test_id: str, cfg: Dict[str, Any]) -> Dict[str, Any]:
-    """Dispatch module-specific API tests used by the frontend settings page."""
-    module_id = str(module_id or "").strip()
-    test_id = str(test_id or "").strip()
-
-    if module_id == "proxmox" and test_id == "proxmox":
-        return test_proxmox_api(cfg)
-    if module_id == "dns_reverse_proxy" and test_id == "caddy":
-        return test_caddy_api(cfg)
-    if module_id == "dns_reverse_proxy" and test_id == "opnsense":
-        return test_opnsense_api(cfg)
-
-    out = {"ok": False, "message": f"Unknown test target: {module_id}/{test_id}", "error": "unsupported module/test combination"}
-    print(f"FAIL [api_helper] test_module_api unsupported target: {module_id}/{test_id}")
-    return out

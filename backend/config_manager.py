@@ -57,27 +57,7 @@ class ConfigManager:
             "internal_ip": "127.0.0.1",
             "external_ip": "127.0.0.1",
             "first_boot": True,
-            "enabled_modules": ["containers"],
-            "modules_order": ["containers", "proxmox", "code_editor", "monitor", "notifications", "dns_reverse_proxy"],
             "modules": {
-                "proxmox": {
-                    "api_url": "https://proxmox.example:8006/api2/json",
-                    "token_id": "",
-                    "token_secret": "",
-                    "verify_ssl": True,
-                    "node": "",
-                },
-                "code_editor": {
-                    "custom_js": "",
-                    "custom_css": "",
-                    "pages": ["containers"],
-                },
-                "monitor": {
-                    "polling_rate": 10.0
-                },
-                "notifications": {
-                    "polling_rate": 60.0
-                },
                 "dns_reverse_proxy": {
                     "reverse_proxy_provider": "caddy",
                     "dns_provider": "opnsense",

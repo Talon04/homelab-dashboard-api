@@ -1,10 +1,6 @@
 """Database models for the homelab dashboard.
 
-Defines SQLAlchemy ORM models for:
-- Containers and VMs (infrastructure)
-- Monitoring configuration
-- Events and delivery tracking
-- Notification channels and rules
+Defines SQLAlchemy ORM models for containers, ports, and container widgets.
 """
 
 from sqlalchemy import (
@@ -71,27 +67,6 @@ class ContainerPort(Base):
     container = relationship("Container", back_populates="ports")
 
 
-class VM(Base):
-    """Virtual machine tracked by the dashboard (Proxmox integration)."""
-
-    __tablename__ = "vms"
-
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    proxmox_id = Column(String, unique=True, nullable=False)
-    name = Column(String, nullable=False)
-    status = Column(String, nullable=False)
-    cpu_cores = Column(Integer, nullable=True)
-    memory_mb = Column(Integer, nullable=True)
-    disk_gb = Column(Integer, nullable=True)
-    ip_address = Column(String, nullable=True)
-    preferred_port = Column(String, nullable=True)
-    internal_link_body = Column(Text, nullable=True)
-    external_link_body = Column(Text, nullable=True)
-    is_exposed = Column(Boolean, default=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-
-
 class ContainerWidget(Base):
     """Custom widget attached to a container in the UI."""
 
@@ -110,107 +85,6 @@ class ContainerWidget(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     container = relationship("Container", back_populates="widgets")
-
-
-# =============================================================================
-# Monitoring Models
-# =============================================================================
-
-
-class MonitorBodies(Base):
-    """Monitor configuration entry for a container or VM."""
-
-    __tablename__ = "monitor_bodies"
-
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    name = Column(String, nullable=False)
-    container_id = Column(Integer, ForeignKey("containers.id"), nullable=True)
-    vm_id = Column(Integer, ForeignKey("vms.id"), nullable=True)
-    monitor_type = Column(String, nullable=False)  # container | vm
-    enabled = Column(Boolean, default=True)
-    event_severity_settings = Column(Text, nullable=True)  # JSON config
-
-
-class MonitorPoints(Base):
-    """Historical monitoring data point."""
-
-    __tablename__ = "monitor_points"
-
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    monitor_body_id = Column(Integer, ForeignKey("monitor_bodies.id"), nullable=False)
-    timestamp = Column(DateTime, default=datetime.utcnow)
-    value = Column(String, nullable=False)  # online | offline | unknown
-
-
-# =============================================================================
-# Event System Models
-# =============================================================================
-
-
-class Event(Base):
-    """System event that can trigger notifications."""
-
-    __tablename__ = "events"
-
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    timestamp = Column(DateTime, default=datetime.utcnow)
-    severity = Column(Integer, nullable=False)  # 1=info, 2=warning, 3=critical, etc.
-    source = Column(String, nullable=False)  # monitor | script | docker | system
-    title = Column(String, nullable=False)
-    message = Column(Text, nullable=False)
-    object_type = Column(String, nullable=True)  # container | vm | monitor | script
-    object_id = Column(Integer, nullable=True)
-    fingerprint = Column(String, nullable=False)  # for deduplication
-    acknowledged = Column(Boolean, default=False)
-    acknowledged_at = Column(DateTime, nullable=True)
-
-
-class EventDelivery(Base):
-    """Tracks delivery of an event to a notification channel."""
-
-    __tablename__ = "event_deliveries"
-
-    id = Column(Integer, primary_key=True)
-    event_id = Column(Integer, ForeignKey("events.id"), nullable=False)
-    channel_id = Column(Integer, ForeignKey("notification_channels.id"), nullable=False)
-    status = Column(String, default="pending")  # pending | sent | failed
-    last_attempt = Column(DateTime)
-    error = Column(Text, nullable=True)
-
-
-# =============================================================================
-# Notification Channel Models
-# =============================================================================
-
-
-class NotificationChannel(Base):
-    """Configuration for a notification delivery channel (Discord, email, etc.)."""
-
-    __tablename__ = "notification_channels"
-
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    name = Column(String, nullable=False)
-    channel_type = Column(String, nullable=False)  # discord | push | email | webhook
-    enabled = Column(Boolean, default=True)
-    config = Column(
-        Text, nullable=True
-    )  # JSON config (webhook_url, smtp settings, etc.)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-
-
-class NotificationRule(Base):
-    """Maps event severity levels to notification channels."""
-
-    __tablename__ = "notification_rules"
-
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    channel_id = Column(Integer, ForeignKey("notification_channels.id"), nullable=False)
-    min_severity = Column(
-        Integer, nullable=False
-    )  # events >= min_severity use this channel
-    enabled = Column(Boolean, default=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
 
 
 # =============================================================================
@@ -244,3 +118,85 @@ class DatabaseManager:
         """Close a database session."""
         if session:
             session.close()
+
+
+# =============================================================================
+# Service Modeling Models
+# =============================================================================
+
+
+class Service(Base):
+    """Top-level service model representing a conceptual service/project."""
+
+    __tablename__ = "services"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    name = Column(String, nullable=False, unique=True)
+    description = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    elements = relationship("Element", back_populates="service", cascade="all, delete-orphan")
+
+
+class Element(Base):
+    """An element is a node placed on the canvas that belongs to a Service.
+
+    It has a position (x,y) and metadata. Elements can be connected by Relations.
+    """
+
+    __tablename__ = "elements"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    service_id = Column(Integer, ForeignKey("services.id"), nullable=False)
+    key = Column(String, nullable=True)  # an internal key or label
+    title = Column(String, nullable=False)
+    description = Column(Text, nullable=True)
+    x = Column(Integer, default=0)
+    y = Column(Integer, default=0)
+    width = Column(Integer, default=200)
+    height = Column(Integer, default=80)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    service = relationship("Service", back_populates="elements")
+    components = relationship("Component", back_populates="element", cascade="all, delete-orphan")
+
+
+class Component(Base):
+    """A component is a child of an Element, e.g., a linked container or resource."""
+
+    __tablename__ = "components"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    element_id = Column(Integer, ForeignKey("elements.id"), nullable=False)
+    type = Column(String, nullable=False)  # e.g., 'container', 'dns', 'proxy'
+    reference = Column(String, nullable=True)  # e.g., docker id or external ref
+    meta = Column(Text, nullable=True)  # JSON blob for extra metadata
+    text = Column(Text, nullable=True)
+    sort_order = Column(Integer, default=0)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    element = relationship("Element", back_populates="components")
+
+
+class Relation(Base):
+    """Represents a directed relation (edge) between two elements or services.
+
+    source_type/target_type can be 'service' or 'element', and source_id/target_id
+    refer to the corresponding PK.
+    """
+
+    __tablename__ = "relations"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    source_type = Column(String, nullable=False)
+    source_id = Column(Integer, nullable=False)
+    target_type = Column(String, nullable=False)
+    target_id = Column(Integer, nullable=False)
+    label = Column(String, nullable=True)
+    meta = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
