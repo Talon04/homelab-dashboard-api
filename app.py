@@ -6,11 +6,14 @@ services needed for the remaining container/widget workflows.
 
 import os
 import sys
+from dotenv import load_dotenv
 from flask import Flask
 from werkzeug.middleware.proxy_fix import ProxyFix
 from alembic.config import Config
 from alembic import command
 from sqlalchemy import inspect
+
+load_dotenv()
 
 import backend.config_utils
 from backend.widget_service import start_widget_scheduler
